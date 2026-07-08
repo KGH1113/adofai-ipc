@@ -1,0 +1,7 @@
+{
+  "AssemblyPath": "AdofaiIpc.dll",
+  "ClassName": "AdofaiIpc.Main",
+  "AssemblyRequireModPath": true,
+  "NoChangeAssemblyName": true,
+  "BootstrapVersion": 2
+}

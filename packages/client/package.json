@@ -1,0 +1,54 @@
+{
+  "name": "@adofai-ipc/client",
+  "version": "0.1.0",
+  "description": "TypeScript client for the AdofaiIpc local HTTP IPC gateway.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KGH1113/adofai-ipc.git",
+    "directory": "packages/client"
+  },
+  "bugs": {
+    "url": "https://github.com/KGH1113/adofai-ipc/issues"
+  },
+  "homepage": "https://github.com/KGH1113/adofai-ipc#readme",
+  "keywords": [
+    "adofai",
+    "ipc",
+    "localhost",
+    "typescript",
+    "unity",
+    "unitymodmanager"
+  ],
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepack": "pnpm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  }
+}

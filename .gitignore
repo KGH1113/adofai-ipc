@@ -1,0 +1,16 @@
+# Compile File
+*.dll
+bin/
+obj/
+build/
+dist/
+*.tgz
+
+# Library
+node_modules/
+
+# Local Environment
+.env
+
+# MacOS Finder Cache
+.DS_Store
