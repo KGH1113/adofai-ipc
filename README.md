@@ -52,9 +52,10 @@ Mods/
 
 ## Documentation
 
-자세한 사용법은 문서 가이드를 참고해주세요.
+자세한 사용법은 원하는 언어의 문서 가이드를 참고해주세요.
 
-1. [AdofaiIpc 개발 가이드](docs/000-DevelopGuide.md)
+1. [한국어 개발 가이드](docs/000-DevelopGuide.md)
+2. [English Developer Guide](docs/en/000-DevelopGuide.md)
 
 ## Runtime
 

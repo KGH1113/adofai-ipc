@@ -1,5 +1,7 @@
 # AdofaiIpc 개발 가이드
 
+[English](en/000-DevelopGuide.md)
+
 ## 소개
 
 AdofaiIpc는 A Dance of Fire and Ice 모드들이 하나의 localhost HTTP listener를
