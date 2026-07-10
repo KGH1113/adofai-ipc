@@ -1,6 +1,6 @@
 # AdofaiIpc 개발 가이드
 
-[English](en/000-DevelopGuide.md)
+[English](../en/000-DevelopGuide.md)
 
 ## 소개
 

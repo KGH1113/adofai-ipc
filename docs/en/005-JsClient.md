@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide - JavaScript/TypeScript Client
 
-[Guide index](000-DevelopGuide.md) | [Korean](../005-JsClient.md)
+[Guide index](000-DevelopGuide.md) | [Korean](../kor/005-JsClient.md)
 
 1. [Package](#1-package)
 2. [Automatic port discovery](#2-automatic-port-discovery)

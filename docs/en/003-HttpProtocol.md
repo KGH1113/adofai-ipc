@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide - HTTP Protocol
 
-[Guide index](000-DevelopGuide.md) | [Korean](../003-HttpProtocol.md)
+[Guide index](000-DevelopGuide.md) | [Korean](../kor/003-HttpProtocol.md)
 
 1. [Call endpoint](#1-call-endpoint)
 2. [Request body](#2-request-body)

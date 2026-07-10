@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide - Lifecycle
 
-[Guide index](000-DevelopGuide.md) | [Korean](../004-Lifecycle.md)
+[Guide index](000-DevelopGuide.md) | [Korean](../kor/004-Lifecycle.md)
 
 1. [Listener ownership](#1-listener-ownership)
 2. [Register and unregister](#2-register-and-unregister)

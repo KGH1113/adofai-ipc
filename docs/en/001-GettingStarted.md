@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide - Getting Started
 
-[Guide index](000-DevelopGuide.md) | [Korean](../001-GettingStarted.md)
+[Guide index](000-DevelopGuide.md) | [Korean](../kor/001-GettingStarted.md)
 
 1. [What is AdofaiIpc?](#1-what-is-adofaiipc)
 2. [Runtime requirements](#2-runtime-requirements)

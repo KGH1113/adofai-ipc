@@ -7,7 +7,7 @@
 [![Standalone](https://img.shields.io/badge/runtime-standalone-059669?style=for-the-badge)](#runtime)
 [![Build](https://img.shields.io/badge/build-.NET%20SDK-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Target](https://img.shields.io/badge/target-netstandard2.1-2563eb?style=for-the-badge)](https://learn.microsoft.com/dotnet/standard/net-standard)
-[![Docs](https://img.shields.io/badge/docs-guide-f97316?style=for-the-badge)](docs/000-DevelopGuide.md)
+[![Docs](https://img.shields.io/badge/docs-guide-f97316?style=for-the-badge)](docs/README.md)
 
 <br />
 
@@ -54,7 +54,7 @@ Mods/
 
 자세한 사용법은 원하는 언어의 문서 가이드를 참고해주세요.
 
-1. [한국어 개발 가이드](docs/000-DevelopGuide.md)
+1. [한국어 개발 가이드](docs/kor/000-DevelopGuide.md)
 2. [English Developer Guide](docs/en/000-DevelopGuide.md)
 
 ## Runtime

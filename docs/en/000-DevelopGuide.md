@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide
 
-[Korean](../000-DevelopGuide.md)
+[Korean](../kor/000-DevelopGuide.md)
 
 ## Introduction
 

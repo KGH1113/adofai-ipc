@@ -1,6 +1,6 @@
 # AdofaiIpc Developer Guide - Mod API
 
-[Guide index](000-DevelopGuide.md) | [Korean](../002-ModApi.md)
+[Guide index](000-DevelopGuide.md) | [Korean](../kor/002-ModApi.md)
 
 1. [Registering a namespace](#1-registering-a-namespace)
 2. [Registering methods](#2-registering-methods)
