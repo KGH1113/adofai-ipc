@@ -32,6 +32,7 @@ OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
 PACKAGE_ROOT="$(project_path "${ADOFAIIPC_PACKAGE_ROOT:-build/package}")"
 STAGE="$PACKAGE_ROOT/AdofaiIpc"
 ZIP_PATH="$(project_path "${ADOFAIIPC_PACKAGE_ZIP:-build/AdofaiIpc.zip}")"
+CHECKSUM_PATH="$ZIP_PATH.sha256"
 
 require_file() {
   if [ ! -f "$1" ]; then
@@ -55,6 +56,7 @@ require_command() {
 }
 
 require_command zip
+require_command shasum
 require_file "$DOTNET_EXE"
 require_dir "$ADOFAI_MANAGED"
 require_file "$UNITY_MOD_MANAGER_DLL"
@@ -79,6 +81,7 @@ if [ -f "$OUT/AdofaiIpc.pdb" ]; then
 fi
 
 rm -f "$ZIP_PATH"
+rm -f "$CHECKSUM_PATH"
 mkdir -p "$(dirname "$ZIP_PATH")"
 (
   cd "$PACKAGE_ROOT"
@@ -87,4 +90,10 @@ mkdir -p "$(dirname "$ZIP_PATH")"
     -x 'AdofaiIpc/*.log'
 )
 
+(
+  cd "$(dirname "$ZIP_PATH")"
+  shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$CHECKSUM_PATH")"
+)
+
 echo "Packaged to $ZIP_PATH"
+echo "Checksum written to $CHECKSUM_PATH"
