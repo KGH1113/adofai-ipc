@@ -3,7 +3,7 @@
 ## 소개
 
 AdofaiIpc는 A Dance of Fire and Ice 모드들이 하나의 localhost HTTP listener를
-공유할 수 있도록 만든 JALib 기반 IPC 모드입니다.
+공유할 수 있도록 만든 독립형 UnityModManager IPC 모드입니다.
 
 각 모드는 직접 HTTP 서버를 열지 않고, AdofaiIpc에 자신의 namespace와 method를
 등록합니다. 외부 클라이언트는 JSON body에 `namespace`, `method`, `params`,
@@ -12,7 +12,7 @@ AdofaiIpc는 A Dance of Fire and Ice 모드들이 하나의 localhost HTTP liste
 > ⚠️ **주의**
 >
 > AdofaiIpc는 다른 모드가 참조하는 public API assembly이기도 합니다.
-> 모드 생명주기에서는 JALib의 `OnEnable`/`OnDisable` 흐름에 맞춰
+> 모드 생명주기에서는 활성화/비활성화 흐름에 맞춰
 > register/unregister를 명확히 해주세요.
 
 ---

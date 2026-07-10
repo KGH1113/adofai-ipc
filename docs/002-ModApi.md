@@ -7,7 +7,7 @@
 3. [등록 해제](#3-%EB%93%B1%EB%A1%9D-%ED%95%B4%EC%A0%9C)
 4. [Origin 제한](#4-origin-%EC%A0%9C%ED%95%9C)
 5. [이름 규칙](#5-%EC%9D%B4%EB%A6%84-%EA%B7%9C%EC%B9%99)
-6. [Feature 예시](#6-feature-%EC%98%88%EC%8B%9C)
+6. [Lifecycle 예시](#6-lifecycle-%EC%98%88%EC%8B%9C)
 
 ---
 
@@ -61,7 +61,7 @@ ipc.RegisterMainThread("level.open", request => {
 ```
 
 같은 method를 다시 등록하면 기존 handler가 새 handler로 교체됩니다. 이 동작 덕분에
-JALib `Feature.OnEnable()`에서 매번 register해도 중복 등록 예외가 발생하지 않습니다.
+모드가 활성화될 때마다 register해도 중복 등록 예외가 발생하지 않습니다.
 
 ---
 
@@ -131,21 +131,17 @@ namespace에는 `.`을 사용할 수 없습니다.
 
 ---
 
-## 6. Feature 예시
+## 6. Lifecycle 예시
 
-JALib Feature에서는 활성화 시 register, 비활성화 시 unregister하는 흐름을 권장합니다.
+활성화 시 register하고 비활성화 시 unregister하는 흐름을 권장합니다.
 
 ```csharp
-using JALib.Core;
 using AdofaiIpc;
 
-public sealed class IpcFeature : Feature {
+public sealed class IpcFeature {
     private const string Namespace = "tufhelper2";
 
-    public IpcFeature() : base(Main.Instance, nameof(IpcFeature)) {
-    }
-
-    protected override void OnEnable() {
+    public void Enable() {
         AdofaiIpcNamespace ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
             Namespace,
             new IpcNamespaceInfo {
@@ -163,7 +159,7 @@ public sealed class IpcFeature : Feature {
         ipc.RegisterMainThread("level.open", OpenLevel);
     }
 
-    protected override void OnDisable() {
+    public void Disable() {
         AdofaiIpc.AdofaiIpc.UnregisterNamespace(Namespace);
     }
 

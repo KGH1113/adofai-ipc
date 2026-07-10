@@ -4,7 +4,7 @@
 
 [![Runtime](https://img.shields.io/badge/runtime-ADOFAI%20%2F%20Unity-111827?style=for-the-badge&logo=unity&logoColor=white)](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/)
 [![Mod Loader](https://img.shields.io/badge/mod%20loader-UnityModManager-7c3aed?style=for-the-badge)](https://www.nexusmods.com/site/mods/21)
-[![Framework](https://img.shields.io/badge/framework-JALib-f43f5e?style=for-the-badge)](https://github.com/Jongye0l/JALib)
+[![Standalone](https://img.shields.io/badge/runtime-standalone-059669?style=for-the-badge)](#runtime)
 [![Build](https://img.shields.io/badge/build-.NET%20SDK-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Target](https://img.shields.io/badge/target-netstandard2.1-2563eb?style=for-the-badge)](https://learn.microsoft.com/dotnet/standard/net-standard)
 [![Docs](https://img.shields.io/badge/docs-guide-f97316?style=for-the-badge)](docs/000-DevelopGuide.md)
@@ -33,7 +33,7 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 - 모드별 namespace 기반 method 등록
 - namespace/method discovery endpoint 제공
 - Unity main thread가 필요한 handler를 위한 `RegisterMainThread` 지원
-- JALib lifecycle에 맞춘 register/unregister 흐름 지원
+- 모드 lifecycle에 맞춘 register/unregister 흐름 지원
 
 ## Documentation
 
@@ -43,13 +43,12 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 
 ## Runtime
 
-ADOFAI-IPC는 UnityModManager와 JALib을 통해 ADOFAI 내부에서 실행됩니다.
+ADOFAI-IPC는 별도 framework 모드 없이 UnityModManager에서 직접 실행됩니다.
 
 Required at runtime:
 
 - A Dance of Fire and Ice
 - UnityModManager
-- JALib
 - ADOFAI-IPC installed under the ADOFAI `Mods/AdofaiIpc` directory
 
 ## Build
@@ -65,7 +64,6 @@ Build this project with the repository build script:
 - **C# / .NET SDK**: mod implementation and build tooling.
 - **netstandard2.1**: target framework for Unity compatibility.
 - **UnityModManager**: ADOFAI mod loading.
-- **JALib**: JAMod lifecycle, settings, and mod structure.
 - **Newtonsoft.Json**: IPC request and response serialization.
 - **HttpListener**: localhost IPC server.
 - **Bash / .env**: local build and install configuration.

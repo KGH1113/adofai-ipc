@@ -1,32 +1,107 @@
-using JALib.Core;
+using System;
 using Newtonsoft.Json.Linq;
 using AdofaiIpc.Server;
+using AdofaiIpc.Unity;
+using UnityModManagerNet;
 
 namespace AdofaiIpc;
 
-public sealed class Main : JAMod
+public sealed class Main
 {
-  public static Main Instance;
-  public static IpcServer Server;
+  public static Main Instance { get; private set; }
+  public static IpcServer Server { get; private set; }
 
-  protected override void OnSetup()
+  public UnityModManager.ModEntry ModEntry { get; }
+  public string Version => ModEntry.Info.Version;
+
+  private bool _enabled;
+
+  private Main(UnityModManager.ModEntry modEntry)
   {
-    Instance = this;
-    RegisterBuiltInNamespace();
+    ModEntry = modEntry;
   }
 
-  protected override void OnEnable()
+  public static bool Load(UnityModManager.ModEntry modEntry)
   {
-    if (Server != null) return;
+    try
+    {
+      Instance = new Main(modEntry);
+      modEntry.OnToggle = OnToggle;
+      modEntry.OnUnload = OnUnload;
+
+      MainThreadDispatcher.Initialize();
+      RegisterBuiltInNamespace();
+      Instance.Enable();
+      return true;
+    }
+    catch (Exception e)
+    {
+      modEntry.Logger.Error(e.ToString());
+      return false;
+    }
+  }
+
+  public void Log(string message)
+  {
+    ModEntry.Logger.Log(message);
+  }
+
+  public void Warning(string message)
+  {
+    ModEntry.Logger.Warning(message);
+  }
+
+  public void LogException(Exception exception)
+  {
+    ModEntry.Logger.Error(exception.ToString());
+  }
+
+  private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
+  {
+    try
+    {
+      if (value) Instance.Enable();
+      else Instance.Disable();
+      return true;
+    }
+    catch (Exception e)
+    {
+      modEntry.Logger.Error(e.ToString());
+      return false;
+    }
+  }
+
+  private static bool OnUnload(UnityModManager.ModEntry modEntry)
+  {
+    try
+    {
+      Instance?.Disable();
+      MainThreadDispatcher.Shutdown();
+      return true;
+    }
+    catch (Exception e)
+    {
+      modEntry.Logger.Error(e.ToString());
+      return false;
+    }
+  }
+
+  private void Enable()
+  {
+    if (_enabled) return;
 
     Server = new IpcServer();
     Server.Start();
+    _enabled = true;
   }
 
-  protected override void OnDisable()
+  private void Disable()
   {
+    if (!_enabled) return;
+
     Server?.Stop();
     Server = null;
+    _enabled = false;
   }
 
   private static void RegisterBuiltInNamespace()
@@ -34,7 +109,7 @@ public sealed class Main : JAMod
     AdofaiIpcNamespace ipc = AdofaiIpc.RegisterNamespace("adofai-ipc", new IpcNamespaceInfo
     {
       DisplayName = "AdofaiIpc",
-      Version = Instance.Version.ToString()
+      Version = Instance.Version
     });
 
     ipc.Register("ping", request => new

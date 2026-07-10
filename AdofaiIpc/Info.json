@@ -3,7 +3,6 @@
   "DisplayName": "AdofaiIpc",
   "Author": "impl",
   "Version": "0.1.0",
-  "AssemblyName": "JAMod.Bootstrap.dll",
-  "EntryMethod": "JAMod.Bootstrap.Bootstrap.Setup",
-  "LoadAfter": ["JALib"]
+  "AssemblyName": "AdofaiIpc.dll",
+  "EntryMethod": "AdofaiIpc.Main.Load"
 }

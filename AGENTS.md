@@ -11,7 +11,7 @@
 - If you want to build the project, use build.sh instead of manually executing dotnet commands.
 - Always think about the performance and do not make ADOFAI laggy.
 - You can use `ilspycmd` and `assetripper(headless)` to inspect ADOFAI's code. Use it unless you really don't need to.
-- Code must use JALib actively. Refer to these repositories:
+- Runtime code must not depend on JALib. JALib and JipperResourcePack may still be used as design references:
     - [JALib](https://github.com/Jongye0l/JALib)
     - [JipperResourcePack](https://github.com/Jongye0l/JipperResourcePack)
 - If you need TUFHelper source code, use this repository:

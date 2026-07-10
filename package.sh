@@ -20,8 +20,6 @@ DOTNET_EXE="${DOTNET_EXE:-$DOTNET_ROOT/dotnet}"
 
 UNITY_MOD_MANAGER_DLL="${UNITY_MOD_MANAGER_DLL:-$ADOFAI_MANAGED/UnityModManager/UnityModManager.dll}"
 HARMONY_DLL="${HARMONY_DLL:-$ADOFAI_MANAGED/UnityModManager/0Harmony.dll}"
-JALIB_DLL="${JALIB_DLL:-$ADOFAI_MODS_DIR/JALib/JALib.dll}"
-JAMOD_BOOTSTRAP_DLL="${JAMOD_BOOTSTRAP_DLL:-$ADOFAI_MODS_DIR/JALib/JAMod.Bootstrap.dll}"
 
 project_path() {
   case "$1" in
@@ -61,8 +59,6 @@ require_file "$DOTNET_EXE"
 require_dir "$ADOFAI_MANAGED"
 require_file "$UNITY_MOD_MANAGER_DLL"
 require_file "$HARMONY_DLL"
-require_file "$JALIB_DLL"
-require_file "$JAMOD_BOOTSTRAP_DLL"
 
 DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
 "$DOTNET_EXE" build "$PROJECT/AdofaiIpc/AdofaiIpc.csproj" \
@@ -70,15 +66,12 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:AdofaiManaged="$ADOFAI_MANAGED" \
   -p:AdofaiMods="$ADOFAI_MODS_DIR" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL" \
-  -p:HarmonyDll="$HARMONY_DLL" \
-  -p:JALibDll="$JALIB_DLL"
+  -p:HarmonyDll="$HARMONY_DLL"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 cp "$PROJECT/AdofaiIpc/Info.json" "$STAGE/"
-cp "$PROJECT/AdofaiIpc/JAModInfo.json" "$STAGE/"
-cp "$JAMOD_BOOTSTRAP_DLL" "$STAGE/"
 cp "$OUT/AdofaiIpc.dll" "$STAGE/"
 
 if [ -f "$OUT/AdofaiIpc.pdb" ]; then

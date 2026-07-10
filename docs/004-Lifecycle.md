@@ -6,7 +6,7 @@
 2. [Register와 Unregister](#2-register%EC%99%80-unregister)
 3. [Thread 구분](#3-thread-%EA%B5%AC%EB%B6%84)
 4. [Origin policy와 lifecycle](#4-origin-policy%EC%99%80-lifecycle)
-5. [JALib Feature 패턴](#5-jalib-feature-%ED%8C%A8%ED%84%B4)
+5. [모드 lifecycle 패턴](#5-%EB%AA%A8%EB%93%9C-lifecycle-%ED%8C%A8%ED%84%B4)
 
 ---
 
@@ -25,13 +25,13 @@ method만 등록합니다. 이렇게 하면 여러 모드가 동시에 브라우
 AdofaiIpc registry는 같은 namespace 또는 method가 다시 등록되어도 예외를 던지지 않고
 최신 정보로 갱신합니다.
 
-따라서 JALib lifecycle에서 `OnEnable()`이 다시 호출되어도 같은 register 코드를 반복해서
+따라서 모드가 다시 활성화되어도 같은 register 코드를 반복해서
 실행할 수 있습니다.
 
 기능이 꺼질 때는 해당 모드가 소유한 namespace를 해제하는 것을 권장합니다.
 
 ```csharp
-protected override void OnDisable() {
+public void Disable() {
     AdofaiIpc.AdofaiIpc.UnregisterNamespace("tufhelper2");
 }
 ```
@@ -93,20 +93,15 @@ AdofaiIpc.AdofaiIpc.RegisterNamespace(
 
 ---
 
-## 5. JALib Feature 패턴
+## 5. 모드 lifecycle 패턴
 
 AdofaiIpc를 사용하는 모드는 IPC 등록을 하나의 Feature로 분리하는 방식을 권장합니다.
 
 ```csharp
-using JALib.Core;
-
-public sealed class IpcFeature : Feature {
+public sealed class IpcFeature {
     private const string Namespace = "tufhelper2";
 
-    public IpcFeature() : base(Main.Instance, nameof(IpcFeature)) {
-    }
-
-    protected override void OnEnable() {
+    public void Enable() {
         var ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
             Namespace,
             new AdofaiIpc.IpcNamespaceInfo {
@@ -124,7 +119,7 @@ public sealed class IpcFeature : Feature {
         ipc.RegisterMainThread("level.open", OpenLevel);
     }
 
-    protected override void OnDisable() {
+    public void Disable() {
         AdofaiIpc.AdofaiIpc.UnregisterNamespace(Namespace);
     }
 
@@ -142,4 +137,4 @@ public sealed class IpcFeature : Feature {
 }
 ```
 
-이 패턴은 JALib의 활성화/비활성화 흐름과 IPC registry 상태를 함께 맞춰줍니다.
+이 패턴은 모드의 활성화/비활성화 흐름과 IPC registry 상태를 함께 맞춰줍니다.

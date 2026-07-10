@@ -1,6 +1,5 @@
 using System;
 using System.Threading;
-using JALib.Tools;
 
 namespace AdofaiIpc.Unity;
 
@@ -10,14 +9,14 @@ public static class MainThreadInvoker
 
   public static object Invoke(Func<object> action)
   {
-    if (MainThread.IsMainThread()) return action();
+    if (MainThreadDispatcher.IsMainThread) return action();
 
     object result = null;
     Exception exception = null;
 
     using ManualResetEventSlim complete = new ManualResetEventSlim(false);
 
-    MainThread.Run(Main.Instance, () =>
+    MainThreadDispatcher.Run(() =>
     {
       try
       {

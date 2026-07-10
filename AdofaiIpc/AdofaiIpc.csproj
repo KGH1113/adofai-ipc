@@ -12,10 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="JALib">
-      <HintPath>$(JALibDll)</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="UnityModManager">
       <HintPath>$(UnityModManagerDll)</HintPath>
       <Private>false</Private>
