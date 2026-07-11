@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdofaiIpc", "AdofaiIpc\AdofaiIpc.csproj", "{F0807302-BE4A-48DE-B721-9F88643B2CF5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AdofaiIpc.Bootstrap", "AdofaiIpc.Bootstrap\AdofaiIpc.Bootstrap.csproj", "{3D1655D9-3471-4D58-B53C-A967180E89B8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{F0807302-BE4A-48DE-B721-9F88643B2CF5}.Release|x64.Build.0 = Release|Any CPU
 		{F0807302-BE4A-48DE-B721-9F88643B2CF5}.Release|x86.ActiveCfg = Release|Any CPU
 		{F0807302-BE4A-48DE-B721-9F88643B2CF5}.Release|x86.Build.0 = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|x64.Build.0 = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Debug|x86.Build.0 = Debug|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|x64.ActiveCfg = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|x64.Build.0 = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|x86.ActiveCfg = Release|Any CPU
+		{3D1655D9-3471-4D58-B53C-A967180E89B8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -29,6 +29,7 @@ project_path() {
 }
 
 OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
+BOOTSTRAP_OUT="$(project_path "${ADOFAIIPC_BOOTSTRAP_BUILD_DIR:-build/AdofaiIpc.Bootstrap}")"
 PACKAGE_ROOT="$(project_path "${ADOFAIIPC_PACKAGE_ROOT:-build/package}")"
 STAGE="$PACKAGE_ROOT/AdofaiIpc"
 ZIP_PATH="$(project_path "${ADOFAIIPC_PACKAGE_ZIP:-build/AdofaiIpc.zip}")"
@@ -70,14 +71,25 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL" \
   -p:HarmonyDll="$HARMONY_DLL"
 
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.Bootstrap/AdofaiIpc.Bootstrap.csproj" \
+  -p:OutputPath="$BOOTSTRAP_OUT/" \
+  -p:AdofaiManaged="$ADOFAI_MANAGED" \
+  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
+
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 cp "$PROJECT/AdofaiIpc/Info.json" "$STAGE/"
 cp "$OUT/AdofaiIpc.dll" "$STAGE/"
+cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$STAGE/"
 
 if [ -f "$OUT/AdofaiIpc.pdb" ]; then
   cp "$OUT/AdofaiIpc.pdb" "$STAGE/"
+fi
+
+if [ -f "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" ]; then
+  cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" "$STAGE/"
 fi
 
 rm -f "$ZIP_PATH"

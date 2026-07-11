@@ -29,6 +29,7 @@ project_path() {
 }
 
 OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
+BOOTSTRAP_OUT="$(project_path "${ADOFAIIPC_BOOTSTRAP_BUILD_DIR:-build/AdofaiIpc.Bootstrap}")"
 DEST="$(project_path "${ADOFAIIPC_INSTALL_DIR:-$ADOFAI_MODS_DIR/AdofaiIpc}")"
 
 require_file() {
@@ -58,15 +59,26 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL" \
   -p:HarmonyDll="$HARMONY_DLL"
 
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.Bootstrap/AdofaiIpc.Bootstrap.csproj" \
+  -p:OutputPath="$BOOTSTRAP_OUT/" \
+  -p:AdofaiManaged="$ADOFAI_MANAGED" \
+  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
+
 mkdir -p "$DEST"
 rm -rf "$DEST/assembly_cache"
 cp "$PROJECT/AdofaiIpc/Info.json" "$DEST/"
 rm -f "$DEST/JAModInfo.json" "$DEST/JAMod.Bootstrap.dll"
 rm -f "$DEST"/JAMod.Bootstrap.dll.*.cache
 cp "$OUT/AdofaiIpc.dll" "$DEST/"
+cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$DEST/"
 
 if [ -f "$OUT/AdofaiIpc.pdb" ]; then
   cp "$OUT/AdofaiIpc.pdb" "$DEST/"
+fi
+
+if [ -f "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" ]; then
+  cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" "$DEST/"
 fi
 
 echo "Installed to $DEST"

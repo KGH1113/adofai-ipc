@@ -32,6 +32,8 @@ Required components:
 - AdofaiIpc installed at `Mods/AdofaiIpc`
 
 Mods that use the public API must reference `AdofaiIpc.dll` when they are built.
+Mods that include `AdofaiIpc.Bootstrap.dll` can also install the latest package from GitHub
+Releases automatically when AdofaiIpc is missing.
 
 ---
 

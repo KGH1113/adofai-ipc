@@ -2,7 +2,7 @@
   "Id": "AdofaiIpc",
   "DisplayName": "AdofaiIpc",
   "Author": "impl",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "AssemblyName": "AdofaiIpc.dll",
   "EntryMethod": "AdofaiIpc.Main.Load"
 }
