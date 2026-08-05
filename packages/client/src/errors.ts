@@ -1,5 +1,12 @@
 import type { IpcErrorInfo } from "./types";
 
+export type IpcConnectionErrorCode = "UNAVAILABLE" | "TIMEOUT";
+
+export interface IpcConnectionErrorOptions {
+  code?: IpcConnectionErrorCode;
+  cause?: unknown;
+}
+
 export class AdofaiIpcError extends Error {
   constructor(message: string) {
     super(message);
@@ -8,10 +15,35 @@ export class AdofaiIpcError extends Error {
 }
 
 export class IpcConnectionError extends AdofaiIpcError {
-  constructor(message = "Could not connect to AdofaiIpc.") {
+  readonly code: IpcConnectionErrorCode;
+  readonly cause?: unknown;
+
+  constructor(
+    message = "Could not connect to AdofaiIpc.",
+    options: IpcConnectionErrorOptions = {}
+  ) {
     super(message);
     this.name = "IpcConnectionError";
+    this.code = options.code ?? "UNAVAILABLE";
+    this.cause = options.cause;
   }
+}
+
+export class IpcTimeoutError extends IpcConnectionError {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number, options: Pick<IpcConnectionErrorOptions, "cause"> = {}) {
+    super(`AdofaiIpc request timed out after ${timeoutMs} ms.`, {
+      code: "TIMEOUT",
+      cause: options.cause
+    });
+    this.name = "IpcTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export function isIpcUnavailable(error: unknown): error is IpcConnectionError {
+  return error instanceof IpcConnectionError;
 }
 
 export class IpcHttpError extends AdofaiIpcError {

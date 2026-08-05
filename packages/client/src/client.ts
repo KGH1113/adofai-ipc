@@ -1,4 +1,9 @@
-import { IpcConnectionError, IpcHttpError, IpcResponseError } from "./errors";
+import {
+  IpcConnectionError,
+  IpcHttpError,
+  IpcResponseError,
+  IpcTimeoutError
+} from "./errors";
 import type {
   AdofaiIpcClientOptions,
   IpcCallOptions,
@@ -85,7 +90,8 @@ export class AdofaiIpcClient {
 
   private async request<TResult>(path: string, init: RequestInit): Promise<TResult> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutError = new IpcTimeoutError(this.timeoutMs);
+    const timeout = setTimeout(() => controller.abort(timeoutError), this.timeoutMs);
 
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -101,8 +107,11 @@ export class AdofaiIpcClient {
       return (await response.json()) as TResult;
     } catch (error) {
       if (error instanceof IpcHttpError) throw error;
-      if (error instanceof Error) throw new IpcConnectionError(error.message);
-      throw new IpcConnectionError();
+      if (controller.signal.aborted) {
+        if (error === timeoutError) throw timeoutError;
+        throw new IpcTimeoutError(this.timeoutMs, { cause: error });
+      }
+      throw new IpcConnectionError(getErrorMessage(error), { cause: error });
     } finally {
       clearTimeout(timeout);
     }
@@ -159,6 +168,19 @@ export async function tryConnect(options: TryConnectOptions = {}): Promise<Adofa
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return undefined;
 }
 
 function createRequestId(): string {

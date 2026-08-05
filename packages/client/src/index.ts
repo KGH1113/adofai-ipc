@@ -8,7 +8,14 @@ export {
   AdofaiIpcError,
   IpcConnectionError,
   IpcHttpError,
-  IpcResponseError
+  IpcResponseError,
+  IpcTimeoutError,
+  isIpcUnavailable
+} from "./errors";
+
+export type {
+  IpcConnectionErrorCode,
+  IpcConnectionErrorOptions
 } from "./errors";
 
 export type {

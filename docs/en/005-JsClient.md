@@ -47,7 +47,8 @@ const client = await tryConnect({
 });
 ```
 
-`tryConnect` throws `IpcConnectionError` if it cannot find an AdofaiIpc server.
+`tryConnect` ignores individual probe failures and throws an `IpcConnectionError` with code
+`UNAVAILABLE` only if it cannot find an AdofaiIpc server on any candidate port.
 
 ---
 
@@ -85,6 +86,27 @@ await client.getNamespace("example-mod");
 
 Protocol errors are reported as `IpcResponseError`, while non-successful HTTP responses are
 reported as `IpcHttpError`.
+
+Connection failures use `IpcConnectionError`. A request that reaches its configured timeout throws
+`IpcTimeoutError`, which extends `IpcConnectionError` and has code `TIMEOUT`. Use
+`isIpcUnavailable` when both unavailable and timed-out connections should be handled the same way.
+
+```ts
+import {
+  IpcTimeoutError,
+  isIpcUnavailable
+} from "@adofai-ipc/client";
+
+try {
+  await client.health();
+} catch (error) {
+  if (error instanceof IpcTimeoutError) {
+    console.warn(`AdofaiIpc timed out after ${error.timeoutMs} ms.`);
+  } else if (isIpcUnavailable(error)) {
+    console.warn("AdofaiIpc is unavailable.");
+  }
+}
+```
 
 ---
 

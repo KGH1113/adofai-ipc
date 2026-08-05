@@ -39,6 +39,7 @@
     "build": "tsup",
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
+    "test": "pnpm run build && node --test test/*.test.mjs",
     "prepack": "pnpm run build"
   },
   "engines": {

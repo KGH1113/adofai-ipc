@@ -34,6 +34,9 @@ import { tryConnect } from "@adofai-ipc/client";
 const client = await tryConnect();
 ```
 
+각 포트의 연결 실패는 탐색 과정에서 무시됩니다. 모든 후보 포트가 실패하면
+`tryConnect`는 code가 `UNAVAILABLE`인 `IpcConnectionError`를 던집니다.
+
 ---
 
 ## 3. Namespace 호출
@@ -58,6 +61,27 @@ const tufhelper = client.namespace("tufhelper2");
 await tufhelper.call("level.open-from-id", {
   id: "1234"
 });
+```
+
+연결 실패는 `IpcConnectionError`로 전달됩니다. 설정한 제한 시간을 넘긴 요청은
+`IpcConnectionError`를 상속하고 code가 `TIMEOUT`인 `IpcTimeoutError`를 던집니다.
+연결 불가와 timeout을 같은 방식으로 처리하려면 `isIpcUnavailable`을 사용할 수 있습니다.
+
+```ts
+import {
+  IpcTimeoutError,
+  isIpcUnavailable
+} from "@adofai-ipc/client";
+
+try {
+  await client.health();
+} catch (error) {
+  if (error instanceof IpcTimeoutError) {
+    console.warn(`AdofaiIpc 요청이 ${error.timeoutMs}ms 후 timeout되었습니다.`);
+  } else if (isIpcUnavailable(error)) {
+    console.warn("AdofaiIpc에 연결할 수 없습니다.");
+  }
+}
 ```
 
 ---

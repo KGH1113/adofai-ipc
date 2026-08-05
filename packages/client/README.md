@@ -77,6 +77,34 @@ Calls `GET /ipc/namespaces`.
 
 Calls `GET /ipc/namespaces/{name}`.
 
+## Error handling
+
+Connection failures are reported as `IpcConnectionError` with code `UNAVAILABLE`. Request
+timeouts use the more specific `IpcTimeoutError`, which extends `IpcConnectionError` and has code
+`TIMEOUT`.
+
+```ts
+import {
+  IpcTimeoutError,
+  isIpcUnavailable,
+  tryConnect
+} from "@adofai-ipc/client";
+
+try {
+  const client = await tryConnect();
+  await client.health();
+} catch (error) {
+  if (error instanceof IpcTimeoutError) {
+    console.warn(`AdofaiIpc timed out after ${error.timeoutMs} ms.`);
+  } else if (isIpcUnavailable(error)) {
+    console.warn("AdofaiIpc is unavailable.");
+  }
+}
+```
+
+`tryConnect` treats individual probe failures as expected and only throws an `UNAVAILABLE`
+`IpcConnectionError` after every candidate port has failed.
+
 ## Notes
 
 This package uses the global `fetch` API. Node.js 18 or newer is recommended.
