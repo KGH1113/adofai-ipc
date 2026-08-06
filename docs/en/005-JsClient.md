@@ -36,19 +36,25 @@ const client = await tryConnect();
 console.log(client.baseUrl);
 ```
 
-Discovery options can override the host, port range, fetch implementation, and timeout.
+Discovery options can override the host, port range, fetch implementation, probe timeout, and the
+timeout used by the returned client.
 
 ```ts
 const client = await tryConnect({
   host: "127.0.0.1",
   startPort: 32145,
   endPort: 32155,
-  timeoutMs: 750
+  probeTimeoutMs: 500,
+  requestTimeoutMs: 10_000
 });
 ```
 
 `tryConnect` ignores individual probe failures and throws an `IpcConnectionError` with code
 `UNAVAILABLE` only if it cannot find an AdofaiIpc server on any candidate port.
+
+A successful `tryConnect` only confirms that the AdofaiIpc listener is running. It does not mean
+that a target namespace is registered or that the owning mod is ready. The legacy `timeoutMs`
+option remains as a deprecated alias for both timeout values.
 
 ---
 
@@ -62,7 +68,8 @@ const result = await client.call({
   method: "level.open-from-id",
   params: {
     id: "1234"
-  }
+  },
+  timeoutMs: 30_000
 });
 ```
 
@@ -84,12 +91,27 @@ await client.listNamespaces();
 await client.getNamespace("example-mod");
 ```
 
-Protocol errors are reported as `IpcResponseError`, while non-successful HTTP responses are
-reported as `IpcHttpError`.
+Wait separately when a namespace may not have registered yet:
+
+```ts
+await client.waitForNamespace("example-mod", {
+  status: "ready",
+  timeoutMs: 15_000,
+  pollIntervalMs: 100
+});
+```
+
+Namespace registration starts in `initializing`. The owning mod must explicitly transition it to
+`ready` or `error`, and AdofaiIpc blocks method calls until it is ready. A ready wait that expires
+reports `namespace_initializing`; an initialization failure reports `namespace_error`.
+
+Protocol errors, including `namespace_not_found`, `namespace_initializing`, and `namespace_error`,
+are reported as `IpcResponseError`, while non-protocol HTTP failures are reported as
+`IpcHttpError`.
 
 Connection failures use `IpcConnectionError`. A request that reaches its configured timeout throws
-`IpcTimeoutError`, which extends `IpcConnectionError` and has code `TIMEOUT`. Use
-`isIpcUnavailable` when both unavailable and timed-out connections should be handled the same way.
+`IpcTimeoutError`, which extends `IpcConnectionError` and has code `TIMEOUT`.
+`isIpcUnavailable` only matches connection errors whose code is `UNAVAILABLE`.
 
 ```ts
 import {

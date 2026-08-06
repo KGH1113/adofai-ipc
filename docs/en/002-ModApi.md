@@ -8,6 +8,7 @@
 4. [Origin restrictions](#4-origin-restrictions)
 5. [Naming rules](#5-naming-rules)
 6. [Lifecycle example](#6-lifecycle-example)
+7. [Mode readiness](#7-mode-readiness)
 
 ---
 
@@ -25,7 +26,8 @@ AdofaiIpcNamespace ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
 );
 ```
 
-Registering the same namespace again updates its metadata and returns a namespace handle.
+Registering the same namespace again updates its metadata, resets its state to `Initializing`, and
+returns a namespace handle. Existing methods remain registered.
 
 ---
 
@@ -50,7 +52,12 @@ ipc.RegisterMainThread("level.open", request => {
 });
 ```
 
-Registering the same method again replaces the previous handler.
+Registering the same method again replaces the previous handler. After all handlers and mode data
+are ready, allow requests explicitly:
+
+```csharp
+ipc.MarkReady();
+```
 
 ---
 
@@ -145,6 +152,7 @@ public sealed class IpcFeature {
         );
 
         ipc.Register("health", _ => new { ok = true });
+        ipc.MarkReady();
         enabled = true;
     }
 
@@ -156,3 +164,25 @@ public sealed class IpcFeature {
     }
 }
 ```
+
+---
+
+## 7. Mode readiness
+
+Listener discovery and namespace registration do not prove that a mode has finished initializing.
+AdofaiIpc therefore creates every registered namespace in the `Initializing` state and prevents
+its methods from being called until the owner marks it ready.
+
+```csharp
+try {
+    InitializeMode();
+    ipc.MarkReady();
+} catch (Exception error) {
+    ipc.MarkError("initialization_failed", error.Message);
+}
+```
+
+The registry exposes `initializing`, `ready`, and `error` through namespace discovery. Calls made
+while initializing or after an initialization error fail with `namespace_initializing` or
+`namespace_error` before a handler runs. Call `MarkInitializing()` before beginning a later
+reinitialization cycle.

@@ -25,10 +25,14 @@ export type {
   IpcErrorResponse,
   IpcHealthResponse,
   IpcNamespaceDetail,
+  IpcNamespaceErrorInfo,
+  IpcNamespaceStatus,
   IpcNamespacesResponse,
   IpcNamespaceSummary,
   IpcRequestId,
+  IpcRequestOptions,
   IpcResponse,
   IpcSuccessResponse,
-  TryConnectOptions
+  TryConnectOptions,
+  WaitForNamespaceOptions
 } from "./types";

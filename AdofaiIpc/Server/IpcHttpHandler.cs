@@ -21,7 +21,7 @@ public sealed class IpcHttpHandler
       {
         ok = true,
         server = "AdofaiIpc",
-        protocolVersion = 1,
+        protocolVersion = Main.ProtocolVersion,
         port = Main.Server?.Port ?? 0
       });
     }
@@ -98,6 +98,8 @@ public sealed class IpcHttpHandler
       IpcErrorCodes.InvalidNamespace => 400,
       IpcErrorCodes.InvalidMethod => 400,
       IpcErrorCodes.NamespaceNotFound => 404,
+      IpcErrorCodes.NamespaceInitializing => 503,
+      IpcErrorCodes.NamespaceError => 503,
       IpcErrorCodes.HandlerNotFound => 404,
       IpcErrorCodes.HandlerFailed => 500,
       _ => 500

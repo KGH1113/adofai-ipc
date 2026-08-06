@@ -24,6 +24,10 @@ This prevents port conflicts and gives browser clients one protocol for multiple
 Registering an existing namespace or method updates the previous registration, so registration
 code can safely run again after a mod is re-enabled.
 
+Every namespace registration starts or resets the namespace to `Initializing`. Register handlers,
+finish initialization, and call `MarkReady()` before accepting requests. Use `MarkError()` when
+initialization cannot complete.
+
 Unregister the namespace when the owning mod is disabled:
 
 ```csharp
@@ -103,6 +107,7 @@ public sealed class IpcFeature {
 
         ipc.Register("health", _ => new { ok = true });
         ipc.RegisterMainThread("level.open", OpenLevel);
+        ipc.MarkReady();
         enabled = true;
     }
 

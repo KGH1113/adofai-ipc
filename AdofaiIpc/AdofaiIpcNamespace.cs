@@ -9,6 +9,7 @@ public sealed class AdofaiIpcNamespace
 
   public string Name { get; }
   public IpcNamespaceInfo Info { get; }
+  public IpcNamespaceStatus Status => _registry.GetNamespaceStatus(Name);
 
   internal AdofaiIpcNamespace(IpcRegistry registry, string name, IpcNamespaceInfo info)
   {
@@ -25,6 +26,21 @@ public sealed class AdofaiIpcNamespace
   public void RegisterMainThread(string method, Func<IpcRequest, object> handler)
   {
     _registry.RegisterMethod(Name, method, handler, true);
+  }
+
+  public void MarkInitializing()
+  {
+    _registry.SetNamespaceInitializing(Name);
+  }
+
+  public void MarkReady()
+  {
+    _registry.SetNamespaceReady(Name);
+  }
+
+  public void MarkError(string code, string message)
+  {
+    _registry.SetNamespaceError(Name, code, message);
   }
 
   public bool Unregister(string method)

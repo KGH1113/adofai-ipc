@@ -71,8 +71,9 @@ A failed call returns a stable error code and a human-readable message:
 ```
 
 Common error codes include `invalid_request`, `invalid_namespace`, `invalid_method`,
-`namespace_not_found`, `handler_not_found`, `handler_failed`, `origin_not_allowed`, and
-`internal_error`.
+`namespace_not_found`, `namespace_initializing`, `namespace_error`, `handler_not_found`,
+`handler_failed`, `origin_not_allowed`, and `internal_error`. Namespace state failures use HTTP
+`503` and occur before a handler runs.
 
 ---
 
@@ -110,6 +111,8 @@ Check the server and active port:
 GET /ipc/health
 ```
 
+The strict namespace readiness contract is available in protocol version `2`.
+
 List registered namespaces:
 
 ```http
@@ -120,4 +123,21 @@ Inspect one namespace and its methods:
 
 ```http
 GET /ipc/namespaces/example-mod
+```
+
+Namespace list and detail responses include a strict `status` value: `initializing`, `ready`, or
+`error`. Detail responses include error information when initialization failed.
+
+```json
+{
+  "namespace": "example-mod",
+  "displayName": "Example Mod",
+  "version": "1.0.0",
+  "status": "error",
+  "error": {
+    "code": "initialization_failed",
+    "message": "Could not load mode data."
+  },
+  "methods": ["level.open"]
+}
 ```

@@ -43,7 +43,7 @@ export class IpcTimeoutError extends IpcConnectionError {
 }
 
 export function isIpcUnavailable(error: unknown): error is IpcConnectionError {
-  return error instanceof IpcConnectionError;
+  return error instanceof IpcConnectionError && error.code === "UNAVAILABLE";
 }
 
 export class IpcHttpError extends AdofaiIpcError {

@@ -28,6 +28,10 @@ AdofaiIpc registry는 같은 namespace 또는 method가 다시 등록되어도 �
 따라서 모드가 다시 활성화되어도 같은 register 코드를 반복해서
 실행할 수 있습니다.
 
+namespace를 등록하거나 다시 등록하면 상태는 `Initializing`으로 시작합니다. handler 등록과
+초기화를 마친 뒤 `MarkReady()`를 호출해야 요청을 받을 수 있습니다. 초기화를 완료할 수
+없으면 `MarkError()`로 실패 상태를 기록합니다.
+
 기능이 꺼질 때는 해당 모드가 소유한 namespace를 해제하는 것을 권장합니다.
 
 ```csharp
@@ -117,6 +121,7 @@ public sealed class IpcFeature {
 
         ipc.Register("health", Health);
         ipc.RegisterMainThread("level.open", OpenLevel);
+        ipc.MarkReady();
     }
 
     public void Disable() {

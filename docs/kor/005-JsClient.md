@@ -31,11 +31,18 @@ client에서는 `tryConnect`로 실행 중인 AdofaiIpc listener를 찾을 수 �
 ```ts
 import { tryConnect } from "@adofai-ipc/client";
 
-const client = await tryConnect();
+const client = await tryConnect({
+  probeTimeoutMs: 500,
+  requestTimeoutMs: 10_000
+});
 ```
 
 각 포트의 연결 실패는 탐색 과정에서 무시됩니다. 모든 후보 포트가 실패하면
 `tryConnect`는 code가 `UNAVAILABLE`인 `IpcConnectionError`를 던집니다.
+
+`tryConnect` 성공은 AdofaiIpc listener가 실행 중이라는 것만 보장합니다. 대상 namespace가
+등록되었거나 해당 모드의 초기화가 끝났다는 의미는 아닙니다. 기존 `timeoutMs` option은
+두 timeout을 함께 설정하는 deprecated alias로 유지됩니다.
 
 ---
 
@@ -49,7 +56,8 @@ const result = await client.call({
   method: "level.open-from-id",
   params: {
     id: "1234"
-  }
+  },
+  timeoutMs: 30_000
 });
 ```
 
@@ -63,9 +71,26 @@ await tufhelper.call("level.open-from-id", {
 });
 ```
 
+namespace가 아직 등록 중일 수 있으면 listener 탐색과 별도로 기다릴 수 있습니다.
+
+```ts
+await client.waitForNamespace("tufhelper2", {
+  status: "ready",
+  timeoutMs: 15_000,
+  pollIntervalMs: 100
+});
+```
+
+namespace는 등록 직후 `initializing` 상태가 됩니다. namespace를 소유한 모드가 명시적으로
+`ready` 또는 `error`로 전환해야 하며, AdofaiIpc는 `ready`가 되기 전까지 method 호출을
+차단합니다. ready 대기 만료는 `namespace_initializing`, 초기화 실패는 `namespace_error`로
+구분됩니다.
+
 연결 실패는 `IpcConnectionError`로 전달됩니다. 설정한 제한 시간을 넘긴 요청은
 `IpcConnectionError`를 상속하고 code가 `TIMEOUT`인 `IpcTimeoutError`를 던집니다.
-연결 불가와 timeout을 같은 방식으로 처리하려면 `isIpcUnavailable`을 사용할 수 있습니다.
+`namespace_not_found`, `namespace_initializing`, `namespace_error`를 포함한 protocol 오류는
+`IpcResponseError`로 전달됩니다.
+`isIpcUnavailable`은 code가 `UNAVAILABLE`인 연결 오류만 판별하며 timeout은 포함하지 않습니다.
 
 ```ts
 import {

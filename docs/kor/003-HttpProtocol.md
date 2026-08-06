@@ -114,6 +114,8 @@ preflight인 `OPTIONS /ipc` 요청에는 JSON body가 없어서 어떤 namespace
 * namespace가 없거나 형식이 잘못된 경우: `invalid_namespace`
 * namespace가 등록되지 않은 경우: `namespace_not_found`
 * namespace가 등록되어 있지만 Origin이 허용되지 않은 경우: `origin_not_allowed`
+* namespace가 초기화 중인 경우: `namespace_initializing` (`503`)
+* namespace 초기화가 실패한 경우: `namespace_error` (`503`)
 * method가 등록되지 않은 경우: `handler_not_found`
 
 `Origin` header가 없는 curl, native app, local tool 요청은 브라우저 CORS 요청이 아니므로
@@ -132,6 +134,8 @@ GET /ipc/health
 
 서버 상태와 protocol 정보를 확인합니다.
 
+strict namespace 준비 상태 계약은 protocol version `2`부터 제공됩니다.
+
 ```http
 GET /ipc/namespaces
 ```
@@ -143,6 +147,23 @@ GET /ipc/namespaces/tufhelper2
 ```
 
 특정 namespace의 metadata와 method 목록을 확인합니다.
+
+namespace 목록과 상세 응답에는 `initializing`, `ready`, `error` 중 하나인 `status`가 항상
+포함됩니다. 초기화에 실패한 상세 응답에는 error 정보도 포함됩니다.
+
+```json
+{
+  "namespace": "tufhelper2",
+  "displayName": "TUFHelper2",
+  "version": "1.0.0",
+  "status": "error",
+  "error": {
+    "code": "initialization_failed",
+    "message": "Could not load mode data."
+  },
+  "methods": ["level.open"]
+}
+```
 
 클라이언트는 `32145`부터 fallback 포트 후보에 대해 `/ipc/health`를 호출해서
 현재 실행 중인 AdofaiIpc listener를 찾을 수 있습니다.

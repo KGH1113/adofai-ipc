@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AdofaiIpc.Unity;
+using Newtonsoft.Json;
 
 namespace AdofaiIpc.Core;
 
@@ -27,6 +28,8 @@ public sealed class IpcRegistry
       if (_namespaces.TryGetValue(name, out RegisteredNamespace registered))
       {
         registered.Info = info;
+        registered.Status = IpcNamespaceStatus.Initializing;
+        registered.Error = null;
       }
       else
       {
@@ -96,6 +99,52 @@ public sealed class IpcRegistry
     }
   }
 
+  public void SetNamespaceInitializing(string name)
+  {
+    SetNamespaceStatus(name, IpcNamespaceStatus.Initializing, null);
+  }
+
+  public IpcNamespaceStatus GetNamespaceStatus(string name)
+  {
+    if (!IpcNameValidator.IsValidNamespace(name))
+    {
+      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
+    }
+
+    lock (_sync)
+    {
+      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered))
+      {
+        throw new InvalidOperationException("IPC namespace is not registered: " + name);
+      }
+
+      return registered.Status;
+    }
+  }
+
+  public void SetNamespaceReady(string name)
+  {
+    SetNamespaceStatus(name, IpcNamespaceStatus.Ready, null);
+  }
+
+  public void SetNamespaceError(string name, string code, string message)
+  {
+    if (string.IsNullOrWhiteSpace(code))
+    {
+      throw new ArgumentException("Namespace error code is required.", nameof(code));
+    }
+
+    if (string.IsNullOrWhiteSpace(message))
+    {
+      throw new ArgumentException("Namespace error message is required.", nameof(message));
+    }
+
+    SetNamespaceStatus(
+      name,
+      IpcNamespaceStatus.Error,
+      new NamespaceErrorInfo { Code = code, Message = message });
+  }
+
   public IpcResponse Invoke(IpcRequest request)
   {
     if (request == null)
@@ -129,6 +178,23 @@ public sealed class IpcRegistry
           request.Id,
           IpcErrorCodes.NamespaceNotFound,
           "Namespace not found: " + request.Namespace);
+      }
+
+      if (registered.Status == IpcNamespaceStatus.Initializing)
+      {
+        return IpcResponse.Fail(
+          request.Id,
+          IpcErrorCodes.NamespaceInitializing,
+          "Namespace is initializing: " + request.Namespace);
+      }
+
+      if (registered.Status == IpcNamespaceStatus.Error)
+      {
+        string message = registered.Error?.Message ?? "Namespace initialization failed.";
+        return IpcResponse.Fail(
+          request.Id,
+          IpcErrorCodes.NamespaceError,
+          message);
       }
 
       if (!registered.Methods.TryGetValue(request.Method, out handler))
@@ -176,7 +242,8 @@ public sealed class IpcRegistry
         {
           Name = item.Name,
           DisplayName = item.Info.DisplayName,
-          Version = item.Info.Version
+          Version = item.Info.Version,
+          Status = GetStatusName(item.Status)
         })
         .ToList();
     }
@@ -193,6 +260,8 @@ public sealed class IpcRegistry
         Namespace = registered.Name,
         DisplayName = registered.Info.DisplayName,
         Version = registered.Info.Version,
+        Status = GetStatusName(registered.Status),
+        Error = registered.Error,
         Methods = registered.Methods.Keys.OrderBy(method => method).ToList()
       };
     }
@@ -211,10 +280,45 @@ public sealed class IpcRegistry
     }
   }
 
+  private void SetNamespaceStatus(
+    string name,
+    IpcNamespaceStatus status,
+    NamespaceErrorInfo error)
+  {
+    if (!IpcNameValidator.IsValidNamespace(name))
+    {
+      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
+    }
+
+    lock (_sync)
+    {
+      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered))
+      {
+        throw new InvalidOperationException("IPC namespace is not registered: " + name);
+      }
+
+      registered.Status = status;
+      registered.Error = error;
+    }
+  }
+
+  private static string GetStatusName(IpcNamespaceStatus status)
+  {
+    return status switch
+    {
+      IpcNamespaceStatus.Initializing => "initializing",
+      IpcNamespaceStatus.Ready => "ready",
+      IpcNamespaceStatus.Error => "error",
+      _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    };
+  }
+
   private sealed class RegisteredNamespace
   {
     public readonly string Name;
     public IpcNamespaceInfo Info;
+    public IpcNamespaceStatus Status = IpcNamespaceStatus.Initializing;
+    public NamespaceErrorInfo Error;
     public readonly Dictionary<string, IpcHandler> Methods = new Dictionary<string, IpcHandler>();
 
     public RegisteredNamespace(string name, IpcNamespaceInfo info)
@@ -226,16 +330,37 @@ public sealed class IpcRegistry
 
   public sealed class NamespaceSummary
   {
+    [JsonProperty("name")]
     public string Name;
+    [JsonProperty("displayName")]
     public string DisplayName;
+    [JsonProperty("version")]
     public string Version;
+    [JsonProperty("status")]
+    public string Status;
   }
 
   public sealed class NamespaceDetail
   {
+    [JsonProperty("namespace")]
     public string Namespace;
+    [JsonProperty("displayName")]
     public string DisplayName;
+    [JsonProperty("version")]
     public string Version;
+    [JsonProperty("status")]
+    public string Status;
+    [JsonProperty("error")]
+    public NamespaceErrorInfo Error;
+    [JsonProperty("methods")]
     public List<string> Methods;
+  }
+
+  public sealed class NamespaceErrorInfo
+  {
+    [JsonProperty("code")]
+    public string Code;
+    [JsonProperty("message")]
+    public string Message;
   }
 }

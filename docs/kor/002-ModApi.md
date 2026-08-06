@@ -8,6 +8,7 @@
 4. [Origin 제한](#4-origin-%EC%A0%9C%ED%95%9C)
 5. [이름 규칙](#5-%EC%9D%B4%EB%A6%84-%EA%B7%9C%EC%B9%99)
 6. [Lifecycle 예시](#6-lifecycle-%EC%98%88%EC%8B%9C)
+7. [모드 준비 상태](#7-%EB%AA%A8%EB%93%9C-%EC%A4%80%EB%B9%84-%EC%83%81%ED%83%9C)
 
 ---
 
@@ -33,7 +34,8 @@ AdofaiIpcNamespace ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
 ```
 
 namespace는 모드 단위로 하나를 소유하는 것을 권장합니다. 같은 namespace를 다시 등록하면
-기존 namespace의 metadata가 갱신되고, 기존 method들은 유지됩니다.
+기존 namespace의 metadata가 갱신되고 상태는 `Initializing`으로 초기화됩니다. 기존
+method들은 유지됩니다.
 
 ---
 
@@ -62,6 +64,12 @@ ipc.RegisterMainThread("level.open", request => {
 
 같은 method를 다시 등록하면 기존 handler가 새 handler로 교체됩니다. 이 동작 덕분에
 모드가 활성화될 때마다 register해도 중복 등록 예외가 발생하지 않습니다.
+
+모든 handler 등록과 모드 초기화를 마친 뒤 요청을 명시적으로 허용합니다.
+
+```csharp
+ipc.MarkReady();
+```
 
 ---
 
@@ -157,6 +165,7 @@ public sealed class IpcFeature {
 
         ipc.Register("health", Health);
         ipc.RegisterMainThread("level.open", OpenLevel);
+        ipc.MarkReady();
     }
 
     public void Disable() {
@@ -176,3 +185,25 @@ public sealed class IpcFeature {
     }
 }
 ```
+
+---
+
+## 7. 모드 준비 상태
+
+listener 발견과 namespace 등록만으로는 모드의 초기화 완료를 판단할 수 없습니다.
+AdofaiIpc는 모든 namespace를 `Initializing` 상태로 등록하고, 소유한 모드가 준비 완료를
+표시하기 전까지 method 호출을 차단합니다.
+
+```csharp
+try {
+    InitializeMode();
+    ipc.MarkReady();
+} catch (Exception error) {
+    ipc.MarkError("initialization_failed", error.Message);
+}
+```
+
+registry는 namespace discovery에서 `initializing`, `ready`, `error` 상태를 제공합니다.
+초기화 중이거나 초기화가 실패한 namespace를 호출하면 handler 실행 전에 각각
+`namespace_initializing`, `namespace_error`가 반환됩니다. 나중에 다시 초기화할 때는 작업을
+시작하기 전에 `MarkInitializing()`을 호출합니다.

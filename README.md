@@ -32,6 +32,7 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 - 하나의 localhost HTTP listener로 여러 모드 IPC 처리
 - 모드별 namespace 기반 method 등록
 - namespace/method discovery endpoint 제공
+- namespace별 `initializing` / `ready` / `error` 상태와 호출 gating 제공
 - Unity main thread가 필요한 handler를 위한 `RegisterMainThread` 지원
 - 모드 lifecycle에 맞춘 register/unregister 흐름 지원
 - 의존 모드에서 AdofaiIpc를 자동 설치할 수 있는 공용 Bootstrap 제공

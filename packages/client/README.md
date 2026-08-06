@@ -45,7 +45,20 @@ Defaults:
 - host: `127.0.0.1`
 - startPort: `32145`
 - endPort: `32155`
-- timeoutMs: `500`
+- probeTimeoutMs: `500`
+- requestTimeoutMs: `10000`
+
+`tryConnect` only confirms that the AdofaiIpc listener is running. It does not mean that a target
+namespace is registered or that the owning mod has finished initializing.
+
+```ts
+const client = await tryConnect({
+  probeTimeoutMs: 500,
+  requestTimeoutMs: 10_000
+});
+```
+
+The legacy `timeoutMs` option remains as a deprecated alias for both values.
 
 ### `new AdofaiIpcClient(options?)`
 
@@ -60,6 +73,14 @@ const client = new AdofaiIpcClient({
 ### `client.call(options)`
 
 Calls a namespace method through `POST /ipc`.
+
+```ts
+await client.call({
+  namespace: "tufhelper2",
+  method: "activity.get",
+  timeoutMs: 30_000
+});
+```
 
 ### `client.namespace(name)`
 
@@ -77,11 +98,28 @@ Calls `GET /ipc/namespaces`.
 
 Calls `GET /ipc/namespaces/{name}`.
 
+### `client.waitForNamespace(name, options?)`
+
+Polls namespace discovery until the target namespace is registered. Set `status: "ready"` to also
+wait until the namespace owner explicitly marks initialization complete.
+
+```ts
+await client.waitForNamespace("tufhelper2", {
+  status: "ready",
+  timeoutMs: 15_000,
+  pollIntervalMs: 100
+});
+```
+
+AdofaiIpc namespaces have the strict states `initializing`, `ready`, and `error`. A ready wait that
+expires reports `namespace_initializing`; an initialization failure reports `namespace_error`.
+
 ## Error handling
 
 Connection failures are reported as `IpcConnectionError` with code `UNAVAILABLE`. Request
 timeouts use the more specific `IpcTimeoutError`, which extends `IpcConnectionError` and has code
-`TIMEOUT`.
+`TIMEOUT`. Protocol failures, including `namespace_not_found`, are reported as
+`IpcResponseError`. `isIpcUnavailable` only matches the `UNAVAILABLE` state, not timeouts.
 
 ```ts
 import {
@@ -103,7 +141,8 @@ try {
 ```
 
 `tryConnect` treats individual probe failures as expected and only throws an `UNAVAILABLE`
-`IpcConnectionError` after every candidate port has failed.
+`IpcConnectionError` after every candidate port has failed. A successful probe does not guarantee
+that any specific namespace or mode feature is ready.
 
 ## Notes
 

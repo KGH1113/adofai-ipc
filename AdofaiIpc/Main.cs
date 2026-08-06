@@ -8,6 +8,8 @@ namespace AdofaiIpc;
 
 public sealed class Main
 {
+  public const int ProtocolVersion = 2;
+
   public static Main Instance { get; private set; }
   public static IpcServer Server { get; private set; }
 
@@ -116,10 +118,11 @@ public sealed class Main
     {
       pong = true,
       server = "AdofaiIpc",
-      protocolVersion = 1,
+      protocolVersion = ProtocolVersion,
       port = Server?.Port ?? 0
     });
 
     ipc.Register("echo", request => request.Params ?? new JObject());
+    ipc.MarkReady();
   }
 }

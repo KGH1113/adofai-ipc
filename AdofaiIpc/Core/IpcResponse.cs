@@ -1,10 +1,16 @@
+using Newtonsoft.Json;
+
 namespace AdofaiIpc.Core;
 
 public sealed class IpcResponse
 {
+  [JsonProperty("ok")]
   public bool Ok;
+  [JsonProperty("result")]
   public object Result;
+  [JsonProperty("error")]
   public IpcError Error;
+  [JsonProperty("id")]
   public string Id;
 
   public static IpcResponse Success(string id, object result)
