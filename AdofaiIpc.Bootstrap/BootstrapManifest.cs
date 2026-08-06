@@ -11,8 +11,7 @@ internal sealed class BootstrapManifest
   public string AssemblyName { get; set; }
   public string EntryMethod { get; set; }
   public string MinimumAdofaiIpcVersion { get; set; }
-  public string DownloadUrl { get; set; }
-  public string ChecksumUrl { get; set; }
+  public string UpdateManifestUrl { get; set; }
 
   public static BootstrapManifest Load(string modPath)
   {
@@ -27,8 +26,12 @@ internal sealed class BootstrapManifest
     Require(manifest.AssemblyName, nameof(AssemblyName));
     Require(manifest.EntryMethod, nameof(EntryMethod));
     Require(manifest.MinimumAdofaiIpcVersion, nameof(MinimumAdofaiIpcVersion));
-    Require(manifest.DownloadUrl, nameof(DownloadUrl));
-    Require(manifest.ChecksumUrl, nameof(ChecksumUrl));
+    Require(manifest.UpdateManifestUrl, nameof(UpdateManifestUrl));
+    if (!Uri.TryCreate(manifest.UpdateManifestUrl, UriKind.Absolute, out Uri updateUri) ||
+        updateUri.Scheme != Uri.UriSchemeHttps ||
+        !string.Equals(updateUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+        !updateUri.AbsolutePath.StartsWith("/KGH1113/adofai-ipc/releases/", StringComparison.OrdinalIgnoreCase))
+      throw new InvalidDataException($"{FileName} contains a non-official UpdateManifestUrl.");
     return manifest;
   }
 

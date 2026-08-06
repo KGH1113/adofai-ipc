@@ -35,7 +35,7 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 - namespace별 `initializing` / `ready` / `error` 상태와 호출 gating 제공
 - Unity main thread가 필요한 handler를 위한 `RegisterMainThread` 지원
 - 모드 lifecycle에 맞춘 register/unregister 흐름 지원
-- 의존 모드에서 AdofaiIpc를 자동 설치할 수 있는 공용 Bootstrap 제공
+- 의존 모드에서 AdofaiIpc를 자동 설치하고 안정판 업데이트를 staging하는 공용 Bootstrap 제공
 
 ## Installation
 
@@ -49,12 +49,19 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 Mods/
 └── AdofaiIpc/
     ├── AdofaiIpc.Bootstrap.dll
-    ├── AdofaiIpc.dll
-    └── Info.json
+    ├── AdofaiIpc.Shim.dll
+    ├── Info.json
+    ├── Update/state.json
+    ├── Launcher/versions/0.3.0/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.3.0/AdofaiIpc.dll
 ```
 
-Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
-자동으로 설치할 수 있습니다. 수동 설치 방식도 그대로 지원합니다.
+`Info.json`은 교체하지 않는 shim을 로드합니다. shim은 `Update/state.json`이 선택한
+versioned launcher와 runtime을 활성화하며, 실패한 후보는 이전 runtime으로 rollback합니다.
+
+Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 최신 안정판을 설치합니다. 설치된
+0.3.0 이상 launcher는 게임 시작 후 최신 안정판을 한 번 확인하고, 검증된 패키지를 staging한
+뒤 다음 게임 실행부터 활성화합니다. 다운로드나 검증에 실패하면 현재 runtime을 유지합니다.
 
 ## Documentation
 
@@ -81,7 +88,7 @@ Build this project with the repository build script:
 ./build.sh
 ```
 
-Create the release archive and SHA-256 checksum with:
+Create the release archive, SHA-256 checksum, and `AdofaiIpc.update.json` with:
 
 ```bash
 ./package.sh

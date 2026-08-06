@@ -4,8 +4,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <Version>0.3.0</Version>
-    <AssemblyName>AdofaiIpc.Bootstrap</AssemblyName>
-    <RootNamespace>AdofaiIpc.Bootstrap</RootNamespace>
+    <AssemblyName>AdofaiIpc.Shim</AssemblyName>
+    <RootNamespace>AdofaiIpc.Shim</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
@@ -13,10 +13,6 @@
   <ItemGroup>
     <Reference Include="UnityModManager">
       <HintPath>$(UnityModManagerDll)</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>$(AdofaiManaged)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json">

@@ -30,11 +30,12 @@ AdofaiIpc는 별도 framework 모드 없이 UnityModManager에서 직접 실행�
 
 * A Dance of Fire and Ice
 * UnityModManager
-* `Mods/AdofaiIpc`에 설치된 AdofaiIpc
+* `Mods/AdofaiIpc`에 설치된 AdofaiIpc 0.3.0 이상
 
 AdofaiIpc를 사용하는 다른 모드는 자신의 프로젝트에서 `AdofaiIpc.dll`을 참조해야 합니다.
-`AdofaiIpc.Bootstrap.dll`을 포함한 모드는 AdofaiIpc가 설치되어 있지 않을 때 GitHub
-Releases에서 최신 패키지를 자동으로 설치할 수도 있습니다.
+`AdofaiIpc.Bootstrap.dll`을 포함한 모드는 AdofaiIpc가 설치되어 있지 않을 때 최신 안정판을
+자동으로 설치합니다. 설치 후에는 고정 shim과 versioned launcher가 새 안정판을 staging하고
+다음 게임 실행에서 활성화합니다.
 
 ---
 

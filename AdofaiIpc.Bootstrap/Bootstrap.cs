@@ -19,6 +19,17 @@ public static class Bootstrap
     return true;
   }
 
+  public static bool LoadPrepared(UnityModManager.ModEntry modEntry)
+  {
+    BootstrapManifest manifest = BootstrapManifest.Load(modEntry.Path);
+    UnityModManager.ModEntry dependency = ModActivator.Find();
+    if (dependency == null || !ModActivator.IsLoaded()) return Load(modEntry);
+    ModActivator.EnsureVersion(dependency, manifest.MinimumAdofaiIpcVersion);
+    if (!dependency.Enabled) throw new InvalidOperationException("AdofaiIpc is installed but disabled.");
+    DependencyModLoader.Load(modEntry, manifest);
+    return true;
+  }
+
   private static async Task LoadAsync(
     UnityModManager.ModEntry modEntry,
     string displayName,

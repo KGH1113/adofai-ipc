@@ -29,11 +29,12 @@ Required components:
 
 - A Dance of Fire and Ice
 - UnityModManager
-- AdofaiIpc installed at `Mods/AdofaiIpc`
+- AdofaiIpc 0.3.0 or newer installed at `Mods/AdofaiIpc`
 
 Mods that use the public API must reference `AdofaiIpc.dll` when they are built.
-Mods that include `AdofaiIpc.Bootstrap.dll` can also install the latest package from GitHub
-Releases automatically when AdofaiIpc is missing.
+Mods that include `AdofaiIpc.Bootstrap.dll` install the latest stable package automatically when
+AdofaiIpc is missing. After installation, the fixed shim and versioned launcher stage stable updates
+and activate them on the next game launch.
 
 ---
 
