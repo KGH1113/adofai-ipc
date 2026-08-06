@@ -4,7 +4,6 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <Version>0.3.0</Version>
     <AssemblyName>AdofaiIpc</AssemblyName>
     <RootNamespace>AdofaiIpc</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

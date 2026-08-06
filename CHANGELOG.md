@@ -1,12 +1,5 @@
 # Changelog
 
-## 0.3.0
-
-- Added a fixed shim with versioned launcher and runtime payloads.
-- Added stable release manifest checks and next-launch atomic activation.
-- Added streamed size and SHA-256 verification, bounded ZIP extraction, rollback state, and install locking.
-- Changed dependency bootstrap manifests to use `UpdateManifestUrl`; minimum versions now only control fallback eligibility.
-
 All notable changes to this project are documented in this file.
 
 ## [0.1.0] - 2026-07-10

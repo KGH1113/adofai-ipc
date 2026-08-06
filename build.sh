@@ -30,10 +30,7 @@ project_path() {
 
 OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
 BOOTSTRAP_OUT="$(project_path "${ADOFAIIPC_BOOTSTRAP_BUILD_DIR:-build/AdofaiIpc.Bootstrap}")"
-SHIM_OUT="$(project_path "${ADOFAIIPC_SHIM_BUILD_DIR:-build/AdofaiIpc.Shim}")"
-LAUNCHER_OUT="$(project_path "${ADOFAIIPC_LAUNCHER_BUILD_DIR:-build/AdofaiIpc.Launcher}")"
 DEST="$(project_path "${ADOFAIIPC_INSTALL_DIR:-$ADOFAI_MODS_DIR/AdofaiIpc}")"
-VERSION="0.3.0"
 
 require_file() {
   if [ ! -f "$1" ]; then
@@ -68,55 +65,20 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:AdofaiManaged="$ADOFAI_MANAGED" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
 
-DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
-"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.Shim/AdofaiIpc.Shim.csproj" \
-  -p:OutputPath="$SHIM_OUT/" \
-  -p:AdofaiManaged="$ADOFAI_MANAGED" \
-  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
-
-DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
-"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.Launcher/AdofaiIpc.Launcher.csproj" \
-  -p:OutputPath="$LAUNCHER_OUT/" \
-  -p:AdofaiManaged="$ADOFAI_MANAGED" \
-  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
-
-DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
-"$DOTNET_EXE" run --project "$PROJECT/AdofaiIpc.UpdateTests/AdofaiIpc.UpdateTests.csproj" \
-  -p:AdofaiManaged="$ADOFAI_MANAGED" \
-  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
-
-if [ "${ADOFAIIPC_SKIP_INSTALL:-0}" = "1" ]; then
-  echo "Build completed without installing (ADOFAIIPC_SKIP_INSTALL=1)."
-  exit 0
-fi
-
 mkdir -p "$DEST"
 rm -rf "$DEST/assembly_cache"
 cp "$PROJECT/AdofaiIpc/Info.json" "$DEST/"
 rm -f "$DEST/JAModInfo.json" "$DEST/JAMod.Bootstrap.dll"
 rm -f "$DEST"/JAMod.Bootstrap.dll.*.cache
-mkdir -p "$DEST/Launcher/versions/$VERSION" "$DEST/Runtime/versions/$VERSION" "$DEST/Update"
-cp "$SHIM_OUT/AdofaiIpc.Shim.dll" "$DEST/"
-cp "$LAUNCHER_OUT/AdofaiIpc.Launcher.dll" "$DEST/Launcher/versions/$VERSION/"
-cp "$OUT/AdofaiIpc.dll" "$DEST/Runtime/versions/$VERSION/"
+cp "$OUT/AdofaiIpc.dll" "$DEST/"
 cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$DEST/"
-printf '{\n  "SchemaVersion": 1,\n  "Current": "%s",\n  "Previous": null,\n  "Trial": null\n}\n' \
-  "$VERSION" > "$DEST/Update/state.json"
 
 if [ -f "$OUT/AdofaiIpc.pdb" ]; then
-  cp "$OUT/AdofaiIpc.pdb" "$DEST/Runtime/versions/$VERSION/"
+  cp "$OUT/AdofaiIpc.pdb" "$DEST/"
 fi
 
 if [ -f "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" ]; then
   cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" "$DEST/"
-fi
-
-if [ -f "$SHIM_OUT/AdofaiIpc.Shim.pdb" ]; then
-  cp "$SHIM_OUT/AdofaiIpc.Shim.pdb" "$DEST/"
-fi
-
-if [ -f "$LAUNCHER_OUT/AdofaiIpc.Launcher.pdb" ]; then
-  cp "$LAUNCHER_OUT/AdofaiIpc.Launcher.pdb" "$DEST/Launcher/versions/$VERSION/"
 fi
 
 echo "Installed to $DEST"

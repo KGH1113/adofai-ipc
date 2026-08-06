@@ -39,26 +39,6 @@ public sealed class Main
     catch (Exception e)
     {
       modEntry.Logger.Error(e.ToString());
-      Rollback(modEntry);
-      return false;
-    }
-  }
-
-  public static bool Rollback(UnityModManager.ModEntry modEntry)
-  {
-    try
-    {
-      Instance?.Disable();
-      AdofaiIpc.UnregisterNamespace("adofai-ipc");
-      MainThreadDispatcher.Shutdown();
-      modEntry.OnToggle = null;
-      modEntry.OnUnload = null;
-      Instance = null;
-      return true;
-    }
-    catch (Exception exception)
-    {
-      modEntry.Logger.Error("AdofaiIpc rollback failed: " + exception);
       return false;
     }
   }
@@ -95,7 +75,17 @@ public sealed class Main
 
   private static bool OnUnload(UnityModManager.ModEntry modEntry)
   {
-    return Rollback(modEntry);
+    try
+    {
+      Instance?.Disable();
+      MainThreadDispatcher.Shutdown();
+      return true;
+    }
+    catch (Exception e)
+    {
+      modEntry.Logger.Error(e.ToString());
+      return false;
+    }
   }
 
   private void Enable()
