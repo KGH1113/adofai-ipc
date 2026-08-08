@@ -9,6 +9,12 @@
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../AdofaiIpc/Info.json" Link="Current/Info.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../packages/client/package.json" Link="Current/client-package.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../build/AdofaiIpc/AdofaiIpc.dll" Link="Current/AdofaiIpc.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../build/AdofaiIpc.DependencyShim/AdofaiIpc.DependencyShim.dll" Link="Current/AdofaiIpc.DependencyShim.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="AdofaiIpc.Bootstrap">
       <HintPath>../build/AdofaiIpc.Bootstrap/AdofaiIpc.Bootstrap.dll</HintPath>
       <Private>true</Private>

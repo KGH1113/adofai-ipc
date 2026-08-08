@@ -1,6 +1,10 @@
 import type { IpcErrorInfo } from "./types";
 
 export type IpcConnectionErrorCode = "UNAVAILABLE" | "TIMEOUT";
+export type IpcVersionMismatchDirection =
+  | "server_outdated"
+  | "client_outdated"
+  | "legacy_server";
 
 export interface IpcConnectionErrorOptions {
   code?: IpcConnectionErrorCode;
@@ -39,6 +43,29 @@ export class IpcTimeoutError extends IpcConnectionError {
     });
     this.name = "IpcTimeoutError";
     this.timeoutMs = timeoutMs;
+  }
+}
+
+export class IpcVersionMismatchError extends AdofaiIpcError {
+  readonly code = "VERSION_MISMATCH" as const;
+  readonly clientVersion: string;
+  readonly serverVersion: string | null;
+  readonly direction: IpcVersionMismatchDirection;
+  readonly protocolVersion: number | null;
+
+  constructor(options: {
+    clientVersion: string;
+    serverVersion: string | null;
+    direction: IpcVersionMismatchDirection;
+    protocolVersion: number | null;
+  }) {
+    const server = options.serverVersion ?? "legacy/unknown";
+    super(`AdofaiIpc version mismatch: client ${options.clientVersion}, server ${server}.`);
+    this.name = "IpcVersionMismatchError";
+    this.clientVersion = options.clientVersion;
+    this.serverVersion = options.serverVersion;
+    this.direction = options.direction;
+    this.protocolVersion = options.protocolVersion;
   }
 }
 

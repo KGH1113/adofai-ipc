@@ -44,6 +44,7 @@ export type IpcResponse<TResult = unknown> =
 export interface IpcHealthResponse {
   ok: true;
   server: "AdofaiIpc";
+  serverVersion?: string;
   protocolVersion: number;
   port: number;
 }
@@ -90,6 +91,7 @@ export interface TryConnectOptions {
   fetch?: typeof fetch;
   probeTimeoutMs?: number;
   requestTimeoutMs?: number;
+  onVersionMismatch?: (error: import("./errors").IpcVersionMismatchError) => void;
   /** @deprecated Use probeTimeoutMs and requestTimeoutMs instead. */
   timeoutMs?: number;
 }

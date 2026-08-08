@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   AdofaiIpcClient,
+  CLIENT_VERSION,
   IpcConnectionError,
   IpcHttpError,
   IpcResponseError,
   IpcTimeoutError,
+  IpcVersionMismatchError,
   isIpcUnavailable,
   tryConnect
 } from "../dist/index.js";
@@ -303,7 +305,13 @@ test("tryConnect swallows a failed probe and returns the next healthy port", asy
       const port = Number(new URL(String(input)).port);
       probedPorts.push(port);
       if (port === 32145) throw new Error("offline");
-      return jsonResponse({ ok: true, server: "AdofaiIpc", protocolVersion: 1, port });
+      return jsonResponse({
+        ok: true,
+        server: "AdofaiIpc",
+        serverVersion: CLIENT_VERSION,
+        protocolVersion: 1,
+        port
+      });
     }
   });
 
@@ -324,6 +332,7 @@ test("tryConnect applies probeTimeoutMs while scanning ports", async () => {
       return Promise.resolve(jsonResponse({
         ok: true,
         server: "AdofaiIpc",
+        serverVersion: CLIENT_VERSION,
         protocolVersion: 1,
         port
       }));
@@ -346,6 +355,7 @@ test("tryConnect uses a short probe timeout without applying it to later request
         return jsonResponse({
           ok: true,
           server: "AdofaiIpc",
+          serverVersion: CLIENT_VERSION,
           protocolVersion: 1,
           port: 32145
         });
@@ -373,6 +383,123 @@ test("tryConnect reports UNAVAILABLE after all probes fail", async () => {
       assert.equal(error.message, "Could not connect to AdofaiIpc on 127.0.0.1:32145-32146.");
       return true;
     }
+  );
+});
+
+test("tryConnect requires an exact product version", async () => {
+  const client = await tryConnect({
+    startPort: 32145,
+    endPort: 32145,
+    fetch: async () => jsonResponse({
+      ok: true,
+      server: "AdofaiIpc",
+      serverVersion: CLIENT_VERSION,
+      protocolVersion: 2,
+      port: 32145
+    })
+  });
+
+  assert.equal(client.baseUrl, "http://127.0.0.1:32145");
+});
+
+test("missing and invalid serverVersion are legacy_server mismatches", async (t) => {
+  for (const serverVersion of [undefined, "v0.3.0", "0.3.0+build"]) {
+    await t.test(String(serverVersion), async () => {
+      await assert.rejects(
+        tryConnect({
+          startPort: 32145,
+          endPort: 32145,
+          fetch: async () => jsonResponse({
+            ok: true,
+            server: "AdofaiIpc",
+            ...(serverVersion === undefined ? {} : { serverVersion }),
+            protocolVersion: 2,
+            port: 32145
+          })
+        }),
+        (error) => {
+          assert.ok(error instanceof IpcVersionMismatchError);
+          assert.equal(error.code, "VERSION_MISMATCH");
+          assert.equal(error.direction, "legacy_server");
+          assert.equal(error.clientVersion, CLIENT_VERSION);
+          assert.equal(error.serverVersion, serverVersion ?? null);
+          assert.equal(error.protocolVersion, 2);
+          return true;
+        }
+      );
+    });
+  }
+});
+
+test("stable and prerelease mismatches report their direction", async (t) => {
+  const cases = [
+    ["0.2.0", "server_outdated"],
+    ["0.3.0-beta.1", "server_outdated"],
+    ["0.3.1", "client_outdated"],
+    ["0.4.0-beta.1", "client_outdated"]
+  ];
+
+  for (const [serverVersion, direction] of cases) {
+    await t.test(serverVersion, async () => {
+      await assert.rejects(
+        tryConnect({
+          startPort: 32145,
+          endPort: 32145,
+          fetch: async () => jsonResponse({
+            ok: true,
+            server: "AdofaiIpc",
+            serverVersion,
+            protocolVersion: 2,
+            port: 32145
+          })
+        }),
+        (error) => {
+          assert.ok(error instanceof IpcVersionMismatchError);
+          assert.equal(error.direction, direction);
+          return true;
+        }
+      );
+    });
+  }
+});
+
+test("version mismatch callback runs once and cannot replace the typed error", async () => {
+  let callbackCount = 0;
+  let probeCount = 0;
+  await assert.rejects(
+    tryConnect({
+      startPort: 32145,
+      endPort: 32146,
+      onVersionMismatch: () => {
+        callbackCount++;
+        throw new Error("consumer failure");
+      },
+      fetch: async () => {
+        probeCount++;
+        return jsonResponse({
+          ok: true,
+          server: "AdofaiIpc",
+          serverVersion: "0.2.0",
+          protocolVersion: 2,
+          port: 32145
+        });
+      }
+    }),
+    (error) => error instanceof IpcVersionMismatchError
+  );
+  assert.equal(callbackCount, 1);
+  assert.equal(probeCount, 1);
+});
+
+test("an exhausted probe timeout remains a typed TIMEOUT", async () => {
+  await assert.rejects(
+    tryConnect({
+      startPort: 32145,
+      endPort: 32145,
+      probeTimeoutMs: 5,
+      fetch: waitForAbort
+    }),
+    (error) => error instanceof IpcTimeoutError && error.code === "TIMEOUT"
   );
 });
 

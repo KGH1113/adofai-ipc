@@ -7,7 +7,7 @@ Dependent mods package a fixed `AdofaiIpc.DependencyShim.dll`, a three-field
 AdofaiIpc.DependencyShim.dll
 AdofaiIpcBootstrap.json
 DependencyBootstrap/state.json
-DependencyBootstrap/versions/0.2.1/AdofaiIpc.Bootstrap.dll
+DependencyBootstrap/versions/0.3.0/AdofaiIpc.Bootstrap.dll
 ```
 
 `Info.json` points to `AdofaiIpc.DependencyShim.DependencyShim.Load`. The manifest declares only

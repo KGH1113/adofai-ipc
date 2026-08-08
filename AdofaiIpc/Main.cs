@@ -118,6 +118,7 @@ public sealed class Main
     {
       pong = true,
       server = "AdofaiIpc",
+      serverVersion = Instance.Version,
       protocolVersion = ProtocolVersion,
       port = Server?.Port ?? 0
     });

@@ -2,8 +2,10 @@ import {
   IpcConnectionError,
   IpcHttpError,
   IpcResponseError,
-  IpcTimeoutError
+  IpcTimeoutError,
+  IpcVersionMismatchError
 } from "./errors";
+import { CLIENT_VERSION, compareProductVersions } from "./version";
 import type {
   AdofaiIpcClientOptions,
   IpcCallOptions,
@@ -245,6 +247,7 @@ export async function tryConnect(options: TryConnectOptions = {}): Promise<Adofa
     options.probeTimeoutMs ?? options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   const requestTimeoutMs =
     options.requestTimeoutMs ?? options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  let lastProbeError: unknown;
 
   for (let port = startPort; port <= endPort; port++) {
     const client = new AdofaiIpcClient({
@@ -257,19 +260,52 @@ export async function tryConnect(options: TryConnectOptions = {}): Promise<Adofa
       const health = await client.health();
 
       if (health.ok && health.server === "AdofaiIpc") {
+        const mismatch = getVersionMismatch(health);
+        if (mismatch) {
+          try {
+            options.onVersionMismatch?.(mismatch);
+          } catch {
+          }
+          throw mismatch;
+        }
         return new AdofaiIpcClient({
           baseUrl: client.baseUrl,
           fetch: options.fetch,
           requestTimeoutMs
         });
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof IpcVersionMismatchError) throw error;
+      lastProbeError = error;
     }
   }
+
+  if (lastProbeError instanceof IpcTimeoutError) throw lastProbeError;
 
   throw new IpcConnectionError(
     `Could not connect to AdofaiIpc on ${host}:${startPort}-${endPort}.`
   );
+}
+
+function getVersionMismatch(health: IpcHealthResponse): IpcVersionMismatchError | null {
+  const protocolVersion = Number.isInteger(health.protocolVersion) ? health.protocolVersion : null;
+  const serverVersion = typeof health.serverVersion === "string" ? health.serverVersion : null;
+  const comparison = serverVersion === null
+    ? null
+    : compareProductVersions(serverVersion, CLIENT_VERSION);
+
+  if (comparison === 0 && serverVersion === CLIENT_VERSION) return null;
+
+  return new IpcVersionMismatchError({
+    clientVersion: CLIENT_VERSION,
+    serverVersion,
+    direction: comparison === null
+      ? "legacy_server"
+      : comparison < 0
+        ? "server_outdated"
+        : "client_outdated",
+    protocolVersion
+  });
 }
 
 function normalizeBaseUrl(value: string): string {

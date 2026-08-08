@@ -40,6 +40,24 @@ await tufhelper.call("level.open-from-id", {
 
 Finds a running AdofaiIpc server by probing `/ipc/health`.
 
+The client and server product versions must match exactly. A mismatch throws
+`IpcVersionMismatchError` and stops port probing. Use `onVersionMismatch` to display application UI;
+the callback runs at most once per `tryConnect` call and does not suppress the typed error.
+
+```ts
+await tryConnect({
+  onVersionMismatch(error) {
+    if (error.direction === "client_outdated") location.reload();
+    else openAdofaiIpcDownloadNotice(error);
+  }
+});
+```
+
+`server_outdated` means the mod must be updated, `client_outdated` means the web bundle must be
+updated, and `legacy_server` means the server did not provide a valid product version. React
+StrictMode and consumer retry loops can call `tryConnect` more than once, so applications should
+store mismatch as a terminal connection state and deduplicate their own modal or banner.
+
 Defaults:
 
 - host: `127.0.0.1`

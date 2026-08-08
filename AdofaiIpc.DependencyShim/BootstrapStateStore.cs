@@ -1,12 +1,16 @@
 using System;
 using System.IO;
 using Newtonsoft.Json;
+using System.Text.RegularExpressions;
 
 namespace AdofaiIpc.DependencyShim;
 
 internal static class BootstrapStateStore
 {
   private const string RelativeDirectory = "DependencyBootstrap";
+  private static readonly Regex CanonicalVersion = new(
+    @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$",
+    RegexOptions.CultureInvariant);
 
   public static BootstrapState Read(string modRoot)
   {
@@ -65,10 +69,9 @@ internal static class BootstrapStateStore
   private static string StatePath(string modRoot) =>
     Path.Combine(Path.GetFullPath(modRoot), RelativeDirectory, "state.json");
 
-  private static void ValidateVersion(string value)
+  internal static void ValidateVersion(string value)
   {
-    if (string.IsNullOrWhiteSpace(value) || value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-        value.Contains("/") || value.Contains("\\") || value == "." || value == "..")
+    if (string.IsNullOrWhiteSpace(value) || !CanonicalVersion.IsMatch(value))
       throw new InvalidDataException("Dependency bootstrap version is invalid.");
   }
 }

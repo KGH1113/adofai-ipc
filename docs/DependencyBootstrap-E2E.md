@@ -14,7 +14,7 @@ of both TUFReplay and TUFHelperLite.
    required minimum version.
 5. Corrupt `AdofaiIpc.dll`. Verify the load-failure message references the UMM log and neither core
    is called.
-6. Put bootstrap 0.2.1 in one dependent mod and a newer compatible bootstrap candidate in the
+6. Put bootstrap 0.3.0 in one dependent mod and a newer compatible bootstrap candidate in the
    other. Trigger errors and verify exactly one named root and one Canvas exist.
 7. Run case 2 in Korean and English. Verify localized copy, ADOFAI's localized font, working download
    button, and close behavior. Report another issue after closing and verify content updates without

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using UnityModManagerNet;
@@ -69,7 +70,8 @@ public static class DependencyShim
     AssemblyName identity = AssemblyName.GetAssemblyName(source);
     if (identity.Name != "AdofaiIpc.Bootstrap" || identity.Version == null)
       throw new InvalidDataException("Candidate is not an AdofaiIpc.Bootstrap assembly.");
-    string version = identity.Version.ToString(3);
+    string version = FileVersionInfo.GetVersionInfo(source).ProductVersion;
+    BootstrapStateStore.ValidateVersion(version);
     lock (Sync)
     {
       BootstrapState state = BootstrapStateStore.Read(modRoot);
@@ -79,7 +81,8 @@ public static class DependencyShim
       string temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
       File.Copy(source, temporary, false);
       AssemblyName copied = AssemblyName.GetAssemblyName(temporary);
-      if (copied.Name != identity.Name || copied.Version != identity.Version)
+      string copiedVersion = FileVersionInfo.GetVersionInfo(temporary).ProductVersion;
+      if (copied.Name != identity.Name || copied.Version != identity.Version || copiedVersion != version)
         throw new InvalidDataException("Copied dependency bootstrap candidate failed verification.");
       if (File.Exists(destination)) File.Delete(temporary);
       else File.Move(temporary, destination);

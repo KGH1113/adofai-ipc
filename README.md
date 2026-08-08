@@ -80,20 +80,23 @@ Required at runtime:
 
 ## Build
 
-Build this project with the repository build script:
+Build, test, and install this project with the workflow runner:
 
 ```bash
-./build.sh
+./scripts/run.sh build
 ```
 
 컴파일과 bootstrap 테스트만 실행하고 게임 Mods 폴더에는 설치하지 않으려면
-`ADOFAIIPC_SKIP_INSTALL=1 ./build.sh`을 사용합니다.
+`ADOFAIIPC_SKIP_INSTALL=1 ./scripts/run.sh build`를 사용합니다.
 
-Create the release archive and SHA-256 checksum with:
+Create and verify the mod archive and SHA-256 checksum with:
 
 ```bash
-./package.sh
+./scripts/run.sh package
 ```
+
+Use `./scripts/run.sh client` for the npm client only and `./scripts/run.sh check` to validate
+version metadata and shell scripts.
 
 ## Tech Stack
 

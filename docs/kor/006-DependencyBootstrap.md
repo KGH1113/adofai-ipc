@@ -7,7 +7,7 @@
 AdofaiIpc.DependencyShim.dll
 AdofaiIpcBootstrap.json
 DependencyBootstrap/state.json
-DependencyBootstrap/versions/0.2.1/AdofaiIpc.Bootstrap.dll
+DependencyBootstrap/versions/0.3.0/AdofaiIpc.Bootstrap.dll
 ```
 
 `Info.json`은 `AdofaiIpc.DependencyShim.DependencyShim.Load`를 가리킵니다. manifest는

@@ -10,13 +10,17 @@ export {
   IpcHttpError,
   IpcResponseError,
   IpcTimeoutError,
+  IpcVersionMismatchError,
   isIpcUnavailable
 } from "./errors";
 
 export type {
   IpcConnectionErrorCode,
-  IpcConnectionErrorOptions
+  IpcConnectionErrorOptions,
+  IpcVersionMismatchDirection
 } from "./errors";
+
+export { CLIENT_VERSION } from "./version";
 
 export type {
   AdofaiIpcClientOptions,

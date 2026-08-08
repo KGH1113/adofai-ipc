@@ -1,5 +1,13 @@
 <Project>
   <PropertyGroup>
+    <ProductVersion>0.3.0</ProductVersion>
+    <ProductVersionCore>$([System.Text.RegularExpressions.Regex]::Replace('$(ProductVersion)', '-.*$', ''))</ProductVersionCore>
+    <Version>$(ProductVersion)</Version>
+    <VersionPrefix>$(ProductVersionCore)</VersionPrefix>
+    <AssemblyVersion>$(ProductVersionCore)</AssemblyVersion>
+    <FileVersion>$(ProductVersionCore)</FileVersion>
+    <InformationalVersion>$(ProductVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AdofaiDir Condition="'$(AdofaiDir)' == '' and '$(ADOFAI_DIR)' != ''">$(ADOFAI_DIR)</AdofaiDir>
     <AdofaiDir Condition="'$(AdofaiDir)' == ''">$(HOME)/Library/Application Support/Steam/steamapps/common/A Dance of Fire and Ice</AdofaiDir>
 

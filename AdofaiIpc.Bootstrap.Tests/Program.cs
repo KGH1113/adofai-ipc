@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Diagnostics;
 using Newtonsoft.Json;
 using AdofaiIpc.Bootstrap;
 using AdofaiIpc.DependencyShim;
@@ -21,6 +22,7 @@ internal static class Program
       Run("cross-bootstrap BCL registry protocol", TestCrossBootstrapRegistry);
       Run("atomic bootstrap state and backup recovery", TestStateRecovery);
       Run("bootstrap trial staging and discard", TestTrial);
+      Run("lockstep product version", TestLockstepVersion);
       Console.WriteLine($"Passed {_passed} bootstrap tests.");
       return 0;
     }
@@ -45,10 +47,10 @@ internal static class Program
 
   private static void TestVersions()
   {
-    Assert(ModActivator.TrySatisfies("0.2.0", "0.2.0", out _), "Equal version was rejected.");
-    Assert(ModActivator.TrySatisfies("0.3.0", "0.2.0", out _), "Newer version was rejected.");
-    Assert(!ModActivator.TrySatisfies("0.1.0", "0.2.0", out _), "Outdated version was accepted.");
-    Assert(!ModActivator.TrySatisfies("preview", "0.2.0", out _), "Invalid version was accepted.");
+    Assert(ModActivator.TrySatisfies("0.3.0", "0.3.0", out _), "Equal version was rejected.");
+    Assert(ModActivator.TrySatisfies("0.3.1", "0.3.0", out _), "Newer version was rejected.");
+    Assert(!ModActivator.TrySatisfies("0.2.0", "0.3.0", out _), "Official v0.2.0 was not outdated.");
+    Assert(!ModActivator.TrySatisfies("preview", "0.3.0", out _), "Invalid version was accepted.");
   }
 
   private static void TestRegistry()
@@ -68,7 +70,7 @@ internal static class Program
   {
     using TemporaryDirectory directory = new();
     BootstrapStateStore.Write(directory.Path, State("0.2.0"));
-    BootstrapStateStore.Write(directory.Path, State("0.2.1"));
+    BootstrapStateStore.Write(directory.Path, State("0.3.0"));
     File.WriteAllText(Path.Combine(directory.Path, "DependencyBootstrap", "state.json"), "broken");
     BootstrapState recovered = BootstrapStateStore.Read(directory.Path);
     Assert(recovered.Current == "0.2.0", "Backup state was not recovered.");
@@ -98,10 +100,33 @@ internal static class Program
     BootstrapStateStore.Write(directory.Path, State("0.2.0"));
     string candidate = typeof(Bootstrap).Assembly.Location;
     string version = DependencyShim.StageCandidate(directory.Path, candidate);
+    Assert(version == "0.3.0", "Bootstrap ProductVersion was not preserved by the shim.");
     Assert(BootstrapStateStore.Read(directory.Path).Trial == version, "Trial was not recorded.");
     DependencyShim.DiscardTrial(directory.Path, version);
     Assert(BootstrapStateStore.Read(directory.Path).Trial == null, "Trial was not discarded.");
   }
+
+  private static void TestLockstepVersion()
+  {
+    string root = AppContext.BaseDirectory;
+    string version = ReadJsonVersion(Path.Combine(root, "Current", "Info.json"), "Version");
+    Assert(version == "0.3.0", "Unexpected canonical product version.");
+    Assert(ReadJsonVersion(Path.Combine(root, "Current", "client-package.json"), "version") == version,
+      "npm package is not lockstep with Info.json.");
+    Assert(FileVersionInfo.GetVersionInfo(typeof(Bootstrap).Assembly.Location).ProductVersion == version,
+      "Bootstrap ProductVersion is not lockstep with Info.json.");
+    Assert(FileVersionInfo.GetVersionInfo(Path.Combine(root, "Current", "AdofaiIpc.dll")).ProductVersion == version,
+      "Runtime ProductVersion is not lockstep with Info.json.");
+    Assert(FileVersionInfo.GetVersionInfo(Path.Combine(root, "Current", "AdofaiIpc.DependencyShim.dll")).ProductVersion == "1.0.0",
+      "Fixed dependency shim ABI version changed.");
+  }
+
+  private static string ReadJsonVersion(string path, string property)
+  {
+    dynamic value = JsonConvert.DeserializeObject(File.ReadAllText(path));
+    return (string)value[property];
+  }
+
 
   private static DependencyIssue Issue(string id, string name, string minimum) => new()
   {

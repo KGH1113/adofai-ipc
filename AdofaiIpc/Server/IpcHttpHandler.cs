@@ -21,6 +21,7 @@ public sealed class IpcHttpHandler
       {
         ok = true,
         server = "AdofaiIpc",
+        serverVersion = Main.Instance.Version,
         protocolVersion = Main.ProtocolVersion,
         port = Main.Server?.Port ?? 0
       });
