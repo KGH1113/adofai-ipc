@@ -30,6 +30,7 @@ project_path() {
 
 OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
 BOOTSTRAP_OUT="$(project_path "${ADOFAIIPC_BOOTSTRAP_BUILD_DIR:-build/AdofaiIpc.Bootstrap}")"
+SHIM_OUT="$(project_path "${ADOFAIIPC_SHIM_BUILD_DIR:-build/AdofaiIpc.DependencyShim}")"
 DEST="$(project_path "${ADOFAIIPC_INSTALL_DIR:-$ADOFAI_MODS_DIR/AdofaiIpc}")"
 
 require_file() {
@@ -65,20 +66,36 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:AdofaiManaged="$ADOFAI_MANAGED" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
 
-mkdir -p "$DEST"
-rm -rf "$DEST/assembly_cache"
-cp "$PROJECT/AdofaiIpc/Info.json" "$DEST/"
-rm -f "$DEST/JAModInfo.json" "$DEST/JAMod.Bootstrap.dll"
-rm -f "$DEST"/JAMod.Bootstrap.dll.*.cache
-cp "$OUT/AdofaiIpc.dll" "$DEST/"
-cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$DEST/"
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.DependencyShim/AdofaiIpc.DependencyShim.csproj" \
+  -p:OutputPath="$SHIM_OUT/" \
+  -p:AdofaiManaged="$ADOFAI_MANAGED" \
+  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
 
-if [ -f "$OUT/AdofaiIpc.pdb" ]; then
-  cp "$OUT/AdofaiIpc.pdb" "$DEST/"
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+"$DOTNET_EXE" run --project "$PROJECT/AdofaiIpc.Bootstrap.Tests/AdofaiIpc.Bootstrap.Tests.csproj" \
+  -p:AdofaiManaged="$ADOFAI_MANAGED" \
+  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
+
+if [ "${ADOFAIIPC_SKIP_INSTALL:-0}" != "1" ]; then
+  mkdir -p "$DEST"
+  rm -rf "$DEST/assembly_cache"
+  cp "$PROJECT/AdofaiIpc/Info.json" "$DEST/"
+  rm -f "$DEST/JAModInfo.json" "$DEST/JAMod.Bootstrap.dll"
+  rm -f "$DEST"/JAMod.Bootstrap.dll.*.cache
+  cp "$OUT/AdofaiIpc.dll" "$DEST/"
+  cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$DEST/"
+  cp "$SHIM_OUT/AdofaiIpc.DependencyShim.dll" "$DEST/"
+
+  if [ -f "$OUT/AdofaiIpc.pdb" ]; then
+    cp "$OUT/AdofaiIpc.pdb" "$DEST/"
+  fi
+
+  if [ -f "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" ]; then
+    cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" "$DEST/"
+  fi
+
+  echo "Installed to $DEST"
+else
+  echo "Build and tests completed (installation skipped)."
 fi
-
-if [ -f "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" ]; then
-  cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.pdb" "$DEST/"
-fi
-
-echo "Installed to $DEST"

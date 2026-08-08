@@ -32,8 +32,9 @@ Required components:
 - AdofaiIpc installed at `Mods/AdofaiIpc`
 
 Mods that use the public API must reference `AdofaiIpc.dll` when they are built.
-Mods that include `AdofaiIpc.Bootstrap.dll` can also install the latest package from GitHub
-Releases automatically when AdofaiIpc is missing.
+Mods using the dependency shim can install the latest package from GitHub Releases when
+AdofaiIpc is missing. Dependency errors are aggregated into one in-game dialog. Existing
+dependent mods must be manually reinstalled once to adopt the fixed shim layout.
 
 ---
 

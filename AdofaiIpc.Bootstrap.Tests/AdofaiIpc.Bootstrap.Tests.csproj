@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>AdofaiIpc.Bootstrap.Tests</AssemblyName>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AdofaiIpc.Bootstrap">
+      <HintPath>../build/AdofaiIpc.Bootstrap/AdofaiIpc.Bootstrap.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AdofaiIpc.DependencyShim">
+      <HintPath>../build/AdofaiIpc.DependencyShim/AdofaiIpc.DependencyShim.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityModManager">
+      <HintPath>$(UnityModManagerDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

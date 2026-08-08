@@ -20,3 +20,4 @@ Use `RegisterMainThread` for handlers that access Unity or ADOFAI state.
 3. [HTTP Protocol](003-HttpProtocol.md)
 4. [Lifecycle](004-Lifecycle.md)
 5. [JavaScript/TypeScript Client](005-JsClient.md)
+6. [Dependency Bootstrap](006-DependencyBootstrap.md)

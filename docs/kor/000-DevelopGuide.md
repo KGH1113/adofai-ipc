@@ -26,3 +26,4 @@ AdofaiIpc는 A Dance of Fire and Ice 모드들이 하나의 localhost HTTP liste
 3. [HTTP 프로토콜](003-HttpProtocol.md)
 4. [라이프사이클](004-Lifecycle.md)
 5. [JavaScript/TypeScript Client](005-JsClient.md)
+6. [의존 모드 Bootstrap](006-DependencyBootstrap.md)

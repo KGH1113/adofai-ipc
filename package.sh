@@ -30,6 +30,7 @@ project_path() {
 
 OUT="$(project_path "${ADOFAIIPC_BUILD_DIR:-build/AdofaiIpc}")"
 BOOTSTRAP_OUT="$(project_path "${ADOFAIIPC_BOOTSTRAP_BUILD_DIR:-build/AdofaiIpc.Bootstrap}")"
+SHIM_OUT="$(project_path "${ADOFAIIPC_SHIM_BUILD_DIR:-build/AdofaiIpc.DependencyShim}")"
 PACKAGE_ROOT="$(project_path "${ADOFAIIPC_PACKAGE_ROOT:-build/package}")"
 STAGE="$PACKAGE_ROOT/AdofaiIpc"
 ZIP_PATH="$(project_path "${ADOFAIIPC_PACKAGE_ZIP:-build/AdofaiIpc.zip}")"
@@ -77,12 +78,19 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   -p:AdofaiManaged="$ADOFAI_MANAGED" \
   -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
 
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+"$DOTNET_EXE" build "$PROJECT/AdofaiIpc.DependencyShim/AdofaiIpc.DependencyShim.csproj" \
+  -p:OutputPath="$SHIM_OUT/" \
+  -p:AdofaiManaged="$ADOFAI_MANAGED" \
+  -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
+
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 cp "$PROJECT/AdofaiIpc/Info.json" "$STAGE/"
 cp "$OUT/AdofaiIpc.dll" "$STAGE/"
 cp "$BOOTSTRAP_OUT/AdofaiIpc.Bootstrap.dll" "$STAGE/"
+cp "$SHIM_OUT/AdofaiIpc.DependencyShim.dll" "$STAGE/"
 
 if [ -f "$OUT/AdofaiIpc.pdb" ]; then
   cp "$OUT/AdofaiIpc.pdb" "$STAGE/"

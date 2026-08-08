@@ -33,6 +33,23 @@ internal static class ModActivator
         $"AdofaiIpc {minimumVersion} or newer is required. Installed: {dependency.Info.Version}");
   }
 
+  public static bool TrySatisfies(string installedValue, string requiredValue, out string detail)
+  {
+    if (!TryParseVersion(installedValue, out Version installed) ||
+        !TryParseVersion(requiredValue, out Version required))
+    {
+      detail = "AdofaiIpc version metadata is invalid.";
+      return false;
+    }
+    if (installed < required)
+    {
+      detail = $"AdofaiIpc {requiredValue} or newer is required. Installed: {installedValue}";
+      return false;
+    }
+    detail = null;
+    return true;
+  }
+
   public static void EnsureActive(string minimumVersion)
   {
     UnityModManager.ModEntry dependency = Find();

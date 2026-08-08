@@ -27,8 +27,6 @@ internal sealed class BootstrapManifest
     Require(manifest.AssemblyName, nameof(AssemblyName));
     Require(manifest.EntryMethod, nameof(EntryMethod));
     Require(manifest.MinimumAdofaiIpcVersion, nameof(MinimumAdofaiIpcVersion));
-    Require(manifest.DownloadUrl, nameof(DownloadUrl));
-    Require(manifest.ChecksumUrl, nameof(ChecksumUrl));
     return manifest;
   }
 

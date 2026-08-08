@@ -33,8 +33,10 @@ AdofaiIpc는 별도 framework 모드 없이 UnityModManager에서 직접 실행�
 * `Mods/AdofaiIpc`에 설치된 AdofaiIpc
 
 AdofaiIpc를 사용하는 다른 모드는 자신의 프로젝트에서 `AdofaiIpc.dll`을 참조해야 합니다.
-`AdofaiIpc.Bootstrap.dll`을 포함한 모드는 AdofaiIpc가 설치되어 있지 않을 때 GitHub
-Releases에서 최신 패키지를 자동으로 설치할 수도 있습니다.
+고정 dependency shim을 포함한 모드는 AdofaiIpc가 설치되어 있지 않을 때 GitHub
+Releases에서 최신 패키지를 자동으로 설치할 수 있습니다. 의존성 오류는 게임 안의 공용
+안내창 하나에 합쳐 표시됩니다. 기존 의존 모드는 새 shim 구조 적용을 위해 한 번 수동으로
+재설치해야 합니다.
 
 ---
 

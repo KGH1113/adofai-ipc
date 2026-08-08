@@ -12,11 +12,15 @@ namespace AdofaiIpc.Bootstrap;
 internal static class DependencyInstaller
 {
   private const string ModDirectoryName = "AdofaiIpc";
+  internal const string DownloadUrl = "https://github.com/KGH1113/adofai-ipc/releases/latest/download/AdofaiIpc.zip";
+  internal const string ChecksumUrl = "https://github.com/KGH1113/adofai-ipc/releases/latest/download/AdofaiIpc.zip.sha256";
+  internal const string ReleasePageUrl = "https://github.com/KGH1113/adofai-ipc/releases/latest";
+  private const int MaximumArchiveBytes = 32 * 1024 * 1024;
+  private const int MaximumEntries = 128;
+  private const long MaximumExpandedBytes = 64L * 1024 * 1024;
   private static readonly Regex ChecksumPattern = new("^[0-9a-fA-F]{64}", RegexOptions.Compiled);
 
-  public static async Task InstallAsync(
-    UnityModManager.ModEntry owner,
-    BootstrapManifest manifest)
+  public static async Task InstallAsync(UnityModManager.ModEntry owner)
   {
     byte[] archive;
     string checksum;
@@ -27,9 +31,10 @@ internal static class DependencyInstaller
       client.DefaultRequestHeaders.UserAgent.ParseAdd(
         $"AdofaiIpc.Bootstrap/{typeof(DependencyInstaller).Assembly.GetName().Version}");
 
-      owner.Info.DisplayName = Status(owner, "Downloading AdofaiIpc...");
-      archive = await client.GetByteArrayAsync(manifest.DownloadUrl).ConfigureAwait(false);
-      checksum = await client.GetStringAsync(manifest.ChecksumUrl).ConfigureAwait(false);
+      archive = await client.GetByteArrayAsync(DownloadUrl).ConfigureAwait(false);
+      if (archive.Length > MaximumArchiveBytes)
+        throw new InvalidDataException("The AdofaiIpc package exceeds the size limit.");
+      checksum = await client.GetStringAsync(ChecksumUrl).ConfigureAwait(false);
     }
 
     VerifyChecksum(archive, checksum);
@@ -45,7 +50,6 @@ internal static class DependencyInstaller
     string stagingRoot = Path.Combine(modsPath, $".{ModDirectoryName}-install-{Guid.NewGuid():N}");
     try
     {
-      owner.Info.DisplayName = Status(owner, "Installing AdofaiIpc...");
       Directory.CreateDirectory(stagingRoot);
       ExtractArchive(archive, stagingRoot);
 
@@ -85,8 +89,15 @@ internal static class DependencyInstaller
     using MemoryStream stream = new(archiveBytes, false);
     using ZipArchive archive = new(stream, ZipArchiveMode.Read, false);
 
+    if (archive.Entries.Count > MaximumEntries)
+      throw new InvalidDataException("The AdofaiIpc package contains too many files.");
+    long expandedBytes = 0;
+
     foreach (ZipArchiveEntry entry in archive.Entries)
     {
+      expandedBytes = checked(expandedBytes + entry.Length);
+      if (expandedBytes > MaximumExpandedBytes)
+        throw new InvalidDataException("The AdofaiIpc package exceeds the expanded size limit.");
       string path = Path.GetFullPath(Path.Combine(root, entry.FullName));
       if (!path.StartsWith(root, StringComparison.Ordinal))
         throw new InvalidDataException($"Unsafe archive entry: {entry.FullName}");
@@ -109,11 +120,6 @@ internal static class DependencyInstaller
   {
     return File.Exists(Path.Combine(path, "Info.json")) &&
            File.Exists(Path.Combine(path, "AdofaiIpc.dll"));
-  }
-
-  private static string Status(UnityModManager.ModEntry owner, string status)
-  {
-    return $"{owner.Info.Id} <color=grey>[{status}]</color>";
   }
 
   private static string EnsureTrailingSeparator(string path)

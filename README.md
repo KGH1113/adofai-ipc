@@ -35,7 +35,7 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 - namespace별 `initializing` / `ready` / `error` 상태와 호출 gating 제공
 - Unity main thread가 필요한 handler를 위한 `RegisterMainThread` 지원
 - 모드 lifecycle에 맞춘 register/unregister 흐름 지원
-- 의존 모드에서 AdofaiIpc를 자동 설치할 수 있는 공용 Bootstrap 제공
+- 의존 모드에서 AdofaiIpc를 자동 설치하고 오류를 한 화면에 안내하는 공용 Bootstrap 제공
 
 ## Installation
 
@@ -54,7 +54,12 @@ Mods/
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
-자동으로 설치할 수 있습니다. 수동 설치 방식도 그대로 지원합니다.
+자동으로 설치할 수 있습니다. 설치 실패, 비활성화, 구버전, 로드 실패는 모든 의존 모드가
+공유하는 retained-mode uGUI 하나에 합쳐 표시됩니다. 기존 root bootstrap 패키지에서 새
+고정 shim 구조로 옮길 때는 각 의존 모드를 한 번 수동 재설치해야 합니다.
+
+의존 모드 통합과 updater staging 계약은
+[Dependency Bootstrap guide](docs/en/006-DependencyBootstrap.md)를 참고하세요.
 
 ## Documentation
 
@@ -80,6 +85,9 @@ Build this project with the repository build script:
 ```bash
 ./build.sh
 ```
+
+컴파일과 bootstrap 테스트만 실행하고 게임 Mods 폴더에는 설치하지 않으려면
+`ADOFAIIPC_SKIP_INSTALL=1 ./build.sh`을 사용합니다.
 
 Create the release archive and SHA-256 checksum with:
 
