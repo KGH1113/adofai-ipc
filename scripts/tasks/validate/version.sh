@@ -30,7 +30,9 @@ if [ -n "$ZIP_PATH" ]; then
   zip_version="$(unzip -p "$ZIP_PATH" AdofaiIpc/Info.json | node -e 'let input="";process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>process.stdout.write(JSON.parse(input).Version));')"
   require_version "ZIP Info.json" "$zip_version"
   layout="$(unzip -Z1 "$ZIP_PATH")"
-  for file in AdofaiIpc/Info.json AdofaiIpc/AdofaiIpc.Shim.dll \
+  # AdofaiIpc/AdofaiIpc.dll is required by the official 0.2.0 dependency
+  # installer before it moves a downloaded package into Mods/AdofaiIpc.
+  for file in AdofaiIpc/Info.json AdofaiIpc/AdofaiIpc.dll AdofaiIpc/AdofaiIpc.Shim.dll \
     "AdofaiIpc/Launcher/versions/$VERSION/AdofaiIpc.Launcher.dll" \
     "AdofaiIpc/Runtime/versions/$VERSION/AdofaiIpc.dll" \
     AdofaiIpc/Update/state.json AdofaiIpc/AdofaiIpc.Bootstrap.dll \

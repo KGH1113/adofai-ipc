@@ -24,6 +24,9 @@ copy_mod_artifacts() {
   version="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).Version)' "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/Info.json")"
   mkdir -p "$destination/Update" "$destination/Launcher/versions/$version" "$destination/Runtime/versions/$version"
   cp "$ADOFAIIPC_RUNTIME_SHIM_OUTPUT/AdofaiIpc.Shim.dll" "$destination/"
+  # Official bootstrap 0.2.0 accepts packages only when a root runtime DLL exists.
+  # Info.json still points at the fixed shim, so this compatibility copy is never loaded.
+  cp "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.dll" "$destination/"
   cp "$ADOFAIIPC_LAUNCHER_OUTPUT/AdofaiIpc.Launcher.dll" "$destination/Launcher/versions/$version/"
   cp "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.dll" "$destination/Runtime/versions/$version/"
   printf '{\n  "SchemaVersion": 1,\n  "Current": "%s",\n  "Previous": null,\n  "Trial": null\n}\n' "$version" > "$destination/Update/state.json"

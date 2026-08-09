@@ -50,6 +50,7 @@ Mods/
 └── AdofaiIpc/
     ├── Info.json
     ├── AdofaiIpc.Shim.dll
+    ├── AdofaiIpc.dll                 # 0.2.0 installer compatibility copy
     ├── Update/state.json
     ├── Launcher/versions/0.3.0/AdofaiIpc.Launcher.dll
     └── Runtime/versions/0.3.0/AdofaiIpc.dll
