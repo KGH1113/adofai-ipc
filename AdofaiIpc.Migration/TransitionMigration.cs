@@ -256,7 +256,7 @@ public static class TransitionMigration
     private static Text Text(string name, Transform parent, int size, FontStyle style, TextAnchor anchor)
     { GameObject go = new(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text)); go.transform.SetParent(parent, false); Text text = go.GetComponent<Text>(); text.fontSize = size; text.fontStyle = style; text.alignment = anchor; text.color = Color.white; text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow; return text; }
     private static Button Button(string label, Transform parent)
-    { Image image = Image(label, parent, new Color(.18f, .42f, .78f, 1f)); Button button = image.gameObject.AddComponent<Button>(); Text text = Text("Label", image.transform, 20, FontStyle.Bold, TextAnchor.MiddleCenter); Stretch(text.rectTransform); return button; }
+    { Image image = Image(label, parent, new Color(.18f, .42f, .78f, 1f)); Button button = image.gameObject.AddComponent<Button>(); Text text = Text("Label", image.transform, 20, FontStyle.Bold, TextAnchor.MiddleCenter); text.text = label; Stretch(text.rectTransform); return button; }
     private static void Stretch(RectTransform rect)
     { rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero; }
   }
