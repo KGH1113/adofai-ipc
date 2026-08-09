@@ -170,7 +170,10 @@ public static class DependencyShim
   {
     string path = BootstrapStateStore.CandidatePath(owner.Path, version);
     if (!File.Exists(path)) throw new FileNotFoundException("Dependency bootstrap candidate is missing.", path);
-    Assembly assembly = Assembly.LoadFrom(path);
+    // Mono reuses an earlier LoadFrom assembly by simple name even when its version differs.
+    // A dependent mod may still have loaded the legacy 0.2 bootstrap, so load the candidate
+    // from bytes into its own context to guarantee that the selected version is invoked.
+    Assembly assembly = Assembly.Load(File.ReadAllBytes(path));
     Type type = assembly.GetType("AdofaiIpc.Bootstrap.Bootstrap", true);
     MethodInfo method = type.GetMethod("Load", BindingFlags.Public | BindingFlags.Static, null,
       new[] { typeof(UnityModManager.ModEntry) }, null);
