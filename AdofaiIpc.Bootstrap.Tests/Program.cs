@@ -137,8 +137,12 @@ internal static class Program
   private static void TestDependentTransition()
   {
     using TemporaryDirectory directory = new();
-    string payloadManifest = Path.Combine(Path.GetDirectoryName(typeof(TransitionMigration).Assembly.Location),
-      "AdofaiIpcBootstrap.json");
+    using TemporaryDirectory payload = new();
+    File.Copy(typeof(DependencyShim).Assembly.Location,
+      Path.Combine(payload.Path, "AdofaiIpc.DependencyShim.dll"));
+    File.Copy(typeof(Bootstrap).Assembly.Location,
+      Path.Combine(payload.Path, "AdofaiIpc.Bootstrap.dll"));
+    string payloadManifest = Path.Combine(payload.Path, "AdofaiIpcBootstrap.json");
     File.WriteAllText(payloadManifest,
       "{\"MinimumAdofaiIpcVersion\":\"0.3.0\",\"AssemblyName\":\"Core.dll\",\"EntryMethod\":\"Core.Load\"}");
     File.WriteAllText(Path.Combine(directory.Path, "Info.json"),
@@ -146,8 +150,8 @@ internal static class Program
     UnityModManager.ModInfo info = JsonConvert.DeserializeObject<UnityModManager.ModInfo>(
       File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
     UnityModManager.ModEntry owner = new(info, directory.Path + Path.DirectorySeparatorChar);
-    Assert(TransitionMigration.Prepare(owner), "Legacy dependent mod was not migrated.");
-    Assert(!TransitionMigration.Prepare(owner), "Completed migration was not idempotent.");
+    Assert(TransitionMigration.Prepare(owner, payload.Path), "Legacy dependent mod was not migrated.");
+    Assert(!TransitionMigration.Prepare(owner, payload.Path), "Completed migration was not idempotent.");
     dynamic migrated = JsonConvert.DeserializeObject(File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
     Assert((string)migrated.EntryMethod == "AdofaiIpc.DependencyShim.DependencyShim.Load",
       "Dependent mod entrypoint was not switched.");
@@ -159,7 +163,6 @@ internal static class Program
       File.ReadAllText(Path.Combine(directory.Path, "AdofaiIpcBootstrap.json")));
     Assert((string)manifest.MinimumAdofaiIpcVersion == "0.3.0",
       "The replacement dependency manifest was not activated by the shim.");
-    File.Delete(payloadManifest);
   }
 
   private static void TestLockstepVersion()

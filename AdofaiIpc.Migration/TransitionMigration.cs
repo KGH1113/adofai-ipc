@@ -20,8 +20,11 @@ public static class TransitionMigration
   private const string ReleaseUrl = "https://github.com/KGH1113/adofai-ipc/releases/latest";
 
   public static bool PrepareAndNotify(UnityModManager.ModEntry owner)
+    => PrepareAndNotify(owner, null);
+
+  public static bool PrepareAndNotify(UnityModManager.ModEntry owner, string sourceDirectory)
   {
-    if (!Prepare(owner, out string version)) return false;
+    if (!Prepare(owner, sourceDirectory, out string version)) return false;
     string installed = UnityModManager.modEntries
       .FirstOrDefault(entry => entry.Info.Id == "AdofaiIpc")?.Info.Version ?? string.Empty;
     Report(owner, version, installed);
@@ -33,9 +36,11 @@ public static class TransitionMigration
     return true;
   }
 
-  public static bool Prepare(UnityModManager.ModEntry owner) => Prepare(owner, out _);
+  public static bool Prepare(UnityModManager.ModEntry owner) => Prepare(owner, null, out _);
+  public static bool Prepare(UnityModManager.ModEntry owner, string sourceDirectory)
+    => Prepare(owner, sourceDirectory, out _);
 
-  private static bool Prepare(UnityModManager.ModEntry owner, out string version)
+  private static bool Prepare(UnityModManager.ModEntry owner, string sourceDirectory, out string version)
   {
     version = null;
     string infoPath = Path.Combine(owner.Path, "Info.json");
@@ -51,7 +56,10 @@ public static class TransitionMigration
       return false;
     }
 
-    string sourceDirectory = Path.GetDirectoryName(typeof(TransitionMigration).Assembly.Location);
+    if (string.IsNullOrWhiteSpace(sourceDirectory))
+      sourceDirectory = Path.GetDirectoryName(typeof(TransitionMigration).Assembly.Location);
+    if (string.IsNullOrWhiteSpace(sourceDirectory))
+      throw new InvalidOperationException("AdofaiIpc migration source directory is unavailable.");
     string shimPath = Path.Combine(sourceDirectory, "AdofaiIpc.DependencyShim.dll");
     string bootstrapPath = Path.Combine(sourceDirectory, "AdofaiIpc.Bootstrap.dll");
     string manifestPath = Path.Combine(sourceDirectory, "AdofaiIpcBootstrap.json");
