@@ -8,3 +8,8 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   "$DOTNET_EXE" run --project "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc.Bootstrap.Tests/AdofaiIpc.Bootstrap.Tests.csproj" \
     -p:AdofaiManaged="$ADOFAI_MANAGED" \
     -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"
+
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+  "$DOTNET_EXE" run --project "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc.UpdateTests/AdofaiIpc.UpdateTests.csproj" \
+    -p:AdofaiManaged="$ADOFAI_MANAGED" \
+    -p:UnityModManagerDll="$UNITY_MOD_MANAGER_DLL"

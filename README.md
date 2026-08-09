@@ -48,15 +48,18 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 ```text
 Mods/
 └── AdofaiIpc/
-    ├── AdofaiIpc.Bootstrap.dll
-    ├── AdofaiIpc.dll
-    └── Info.json
+    ├── Info.json
+    ├── AdofaiIpc.Shim.dll
+    ├── Update/state.json
+    ├── Launcher/versions/0.3.0/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.3.0/AdofaiIpc.dll
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
 자동으로 설치할 수 있습니다. 설치 실패, 비활성화, 구버전, 로드 실패는 모든 의존 모드가
-공유하는 retained-mode uGUI 하나에 합쳐 표시됩니다. 기존 root bootstrap 패키지에서 새
-고정 shim 구조로 옮길 때는 각 의존 모드를 한 번 수동 재설치해야 합니다.
+공유하는 retained-mode uGUI 하나에 합쳐 표시됩니다. 기존 0.2.0 사용자는 안내창이 나타난
+실행에서 AdofaiIpc만 한 번 다시 설치하고 게임을 완전히 종료한 뒤 재실행하면 됩니다.
+0.3.0 이후의 안정판은 게임 시작 시 검증한 뒤 같은 실행에서 바로 사용합니다.
 
 의존 모드 통합과 updater staging 계약은
 [Dependency Bootstrap guide](docs/en/006-DependencyBootstrap.md)를 참고하세요.

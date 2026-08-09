@@ -30,7 +30,11 @@ if [ -n "$ZIP_PATH" ]; then
   zip_version="$(unzip -p "$ZIP_PATH" AdofaiIpc/Info.json | node -e 'let input="";process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>process.stdout.write(JSON.parse(input).Version));')"
   require_version "ZIP Info.json" "$zip_version"
   layout="$(unzip -Z1 "$ZIP_PATH")"
-  for file in AdofaiIpc/Info.json AdofaiIpc/AdofaiIpc.dll AdofaiIpc/AdofaiIpc.Bootstrap.dll AdofaiIpc/AdofaiIpc.DependencyShim.dll; do
+  for file in AdofaiIpc/Info.json AdofaiIpc/AdofaiIpc.Shim.dll \
+    "AdofaiIpc/Launcher/versions/$VERSION/AdofaiIpc.Launcher.dll" \
+    "AdofaiIpc/Runtime/versions/$VERSION/AdofaiIpc.dll" \
+    AdofaiIpc/Update/state.json AdofaiIpc/AdofaiIpc.Bootstrap.dll \
+    AdofaiIpc/AdofaiIpc.DependencyShim.dll AdofaiIpc/AdofaiIpc.Migration.dll; do
     grep -Fx "$file" <<< "$layout" >/dev/null || fail "ZIP is missing $file"
   done
 fi

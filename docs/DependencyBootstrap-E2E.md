@@ -12,7 +12,7 @@ of both TUFReplay and TUFHelperLite.
    dialog is shown, and both cores are not loaded.
 4. Install AdofaiIpc 0.1.x. Verify one outdated dialog containing the installed version and highest
    required minimum version.
-5. Corrupt `AdofaiIpc.dll`. Verify the load-failure message references the UMM log and neither core
+5. Corrupt `Runtime/versions/<current>/AdofaiIpc.dll`. Verify the load-failure message references the UMM log and neither core
    is called.
 6. Put bootstrap 0.3.0 in one dependent mod and a newer compatible bootstrap candidate in the
    other. Trigger errors and verify exactly one named root and one Canvas exist.
@@ -25,6 +25,13 @@ of both TUFReplay and TUFHelperLite.
    B1 without changing the dependent runtime.
 10. Start a normal installation and inspect the Unity hierarchy and profiler. Verify no dependency
     error root, scene callback, coroutine, `Update`, `OnGUI`, or recurring allocation exists.
+11. Start with official AdofaiIpc 0.2.0 and TUFReplay beta.8/TUFHelperLite 0.1.2. Let their bridge
+    releases update in the same process. Verify both cores stop, one migration dialog lists both
+    mods, and the fixed dependency entrypoints are prepared.
+12. While case 11 is still running, reinstall AdofaiIpc 0.3.0, fully quit, and start once. Verify
+    both cores load without another migration prompt.
+13. From an installed 0.3.x package, publish a higher synthetic stable manifest on a local fixture.
+    Verify `update -> new AdofaiIpc runtime -> dependent cores` completes in the same game launch.
 
 Keep the UMM log, the two dependency `state.json` files, screenshots of the hierarchy/dialog, and a
 profiler capture with each test run.

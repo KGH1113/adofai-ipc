@@ -3,6 +3,6 @@
   "DisplayName": "AdofaiIpc",
   "Author": "impl",
   "Version": "0.3.0",
-  "AssemblyName": "AdofaiIpc.dll",
-  "EntryMethod": "AdofaiIpc.Main.Load"
+  "AssemblyName": "AdofaiIpc.Shim.dll",
+  "EntryMethod": "AdofaiIpc.Shim.Shim.Load"
 }

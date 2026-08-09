@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>AdofaiIpc.UpdateTests</AssemblyName>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AdofaiIpc.Launcher"><HintPath>../build/AdofaiIpc.Launcher/AdofaiIpc.Launcher.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="AdofaiIpc.Shim"><HintPath>../build/AdofaiIpc.Shim/AdofaiIpc.Shim.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="UnityModManager"><HintPath>$(UnityModManagerDll)</HintPath><Private>true</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

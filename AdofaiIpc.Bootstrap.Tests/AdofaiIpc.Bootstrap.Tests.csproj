@@ -23,8 +23,20 @@
       <HintPath>../build/AdofaiIpc.DependencyShim/AdofaiIpc.DependencyShim.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="AdofaiIpc.Migration">
+      <HintPath>../build/AdofaiIpc.Migration/AdofaiIpc.Migration.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="UnityModManager">
       <HintPath>$(UnityModManagerDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(AdofaiManaged)/UnityEngine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(AdofaiManaged)/UnityEngine.CoreModule.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json">

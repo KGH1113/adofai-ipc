@@ -25,5 +25,7 @@ AdofaiIpc가 비활성화됐거나 오래됐거나 로드에 실패하면 의존
 있으면 영향을 받은 모든 모드를 retained Unity uGUI 하나에 모아 표시합니다. 정상 경로에는
 GameObject, event 구독, coroutine, 프레임별 callback이 없습니다.
 
-구 bootstrap은 로드된 자기 진입 DLL을 교체할 수 없으므로 이 구조를 처음 채택하는 릴리스는
-사용자가 한 번 수동 설치해야 합니다.
+최초 전환 릴리스는 공용 `AdofaiIpc.Migration.dll`로 고정 shim과 bootstrap을 설치하고,
+그 실행에서는 의존 모드 core를 시작하지 않은 채 영향을 받은 모드 목록을 안내창 하나에
+표시합니다. 사용자는 AdofaiIpc만 다시 설치하고 게임을 완전히 종료한 뒤 재실행하면 됩니다.
+신규 설치는 처음부터 최종 구조를 사용하므로 별도 전환이 필요하지 않습니다.

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using Newtonsoft.Json.Linq;
 using UnityModManagerNet;
 
 namespace AdofaiIpc.DependencyShim;
@@ -17,7 +18,15 @@ public static class DependencyShim
     lock (Sync)
     {
       if (LoadedOwners.Contains(owner.Info.Id)) return true;
-      BootstrapState state = BootstrapStateStore.Read(owner.Path);
+      BootstrapState state;
+      try { state = BootstrapStateStore.Read(owner.Path); }
+      catch (FileNotFoundException)
+      {
+        string seed = Path.Combine(Path.GetDirectoryName(typeof(DependencyShim).Assembly.Location),
+          "AdofaiIpc.Bootstrap.dll");
+        Seed(owner, seed);
+        state = BootstrapStateStore.Read(owner.Path);
+      }
       Exception trialError = null;
       if (!string.IsNullOrEmpty(state.Trial))
       {
@@ -64,6 +73,28 @@ public static class DependencyShim
     }
   }
 
+  public static string Seed(UnityModManager.ModEntry owner, string sourceBootstrapPath)
+  {
+    if (owner == null) throw new ArgumentNullException(nameof(owner));
+    string bootstrap = Path.GetFullPath(sourceBootstrapPath);
+    AssemblyName identity = AssemblyName.GetAssemblyName(bootstrap);
+    if (identity.Name != "AdofaiIpc.Bootstrap")
+      throw new InvalidDataException("Seed is not an AdofaiIpc.Bootstrap assembly.");
+    string version = FileVersionInfo.GetVersionInfo(bootstrap).ProductVersion;
+    BootstrapStateStore.ValidateVersion(version);
+
+    lock (Sync)
+    {
+      string rootShim = Path.Combine(owner.Path, "AdofaiIpc.DependencyShim.dll");
+      CopyVerified(typeof(DependencyShim).Assembly.Location, rootShim, "AdofaiIpc.DependencyShim");
+      string candidate = BootstrapStateStore.CandidatePath(owner.Path, version);
+      CopyVerified(bootstrap, candidate, "AdofaiIpc.Bootstrap");
+      BootstrapStateStore.Write(owner.Path, new BootstrapState { Current = version });
+      WriteEntrypoint(owner.Path, rootShim);
+      return version;
+    }
+  }
+
   public static string StageCandidate(string modRoot, string sourceAssemblyPath)
   {
     string source = Path.GetFullPath(sourceAssemblyPath);
@@ -84,7 +115,14 @@ public static class DependencyShim
       string copiedVersion = FileVersionInfo.GetVersionInfo(temporary).ProductVersion;
       if (copied.Name != identity.Name || copied.Version != identity.Version || copiedVersion != version)
         throw new InvalidDataException("Copied dependency bootstrap candidate failed verification.");
-      if (File.Exists(destination)) File.Delete(temporary);
+      if (File.Exists(destination))
+      {
+        AssemblyName existing = AssemblyName.GetAssemblyName(destination);
+        string existingVersion = FileVersionInfo.GetVersionInfo(destination).ProductVersion;
+        File.Delete(temporary);
+        if (existing.Name != identity.Name || existing.Version != identity.Version || existingVersion != version)
+          throw new InvalidDataException("Existing dependency bootstrap candidate failed verification.");
+      }
       else File.Move(temporary, destination);
       state.Trial = version;
       BootstrapStateStore.Write(modRoot, state);
@@ -129,4 +167,32 @@ public static class DependencyShim
     exception is TargetInvocationException invocation && invocation.InnerException != null
       ? invocation.InnerException
       : exception;
+
+  private static void CopyVerified(string source, string destination, string expectedName)
+  {
+    Directory.CreateDirectory(Path.GetDirectoryName(destination));
+    if (File.Exists(destination))
+    {
+      if (AssemblyName.GetAssemblyName(destination).Name != expectedName)
+        throw new InvalidDataException("Existing dependency file has an unexpected identity: " + destination);
+      return;
+    }
+    string temporary = destination + ".tmp-" + Guid.NewGuid().ToString("N");
+    File.Copy(source, temporary, false);
+    if (AssemblyName.GetAssemblyName(temporary).Name != expectedName)
+      throw new InvalidDataException("Copied dependency file has an unexpected identity.");
+    File.Move(temporary, destination);
+  }
+
+  private static void WriteEntrypoint(string modRoot, string rootShim)
+  {
+    string infoPath = Path.Combine(modRoot, "Info.json");
+    JObject info = JObject.Parse(File.ReadAllText(infoPath));
+    info["AssemblyName"] = Path.GetFileName(rootShim);
+    info["EntryMethod"] = "AdofaiIpc.DependencyShim.DependencyShim.Load";
+    string temporary = infoPath + ".tmp-" + Guid.NewGuid().ToString("N");
+    File.WriteAllText(temporary, info.ToString());
+    if (File.Exists(infoPath)) File.Replace(temporary, infoPath, infoPath + ".bak", true);
+    else File.Move(temporary, infoPath);
+  }
 }

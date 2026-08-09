@@ -25,5 +25,7 @@ missing installation is attempted once per process. If that fails, or another de
 found, all affected mods are aggregated into one retained Unity uGUI dialog. The success path creates
 no GameObject, event subscription, coroutine, or per-frame callback.
 
-The first release adopting this layout must be installed manually once because an older bootstrap
-cannot replace its own entry assembly while it is loaded.
+The first bridge releases use the shared `AdofaiIpc.Migration.dll`. They install the fixed shim and
+bootstrap, stop the dependent core for that session, and show one dialog listing every affected mod.
+The user reinstalls only AdofaiIpc, fully quits the game, and starts it again. New installations use
+the final layout directly and do not need this transition.

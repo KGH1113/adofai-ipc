@@ -7,6 +7,8 @@ using System.Diagnostics;
 using Newtonsoft.Json;
 using AdofaiIpc.Bootstrap;
 using AdofaiIpc.DependencyShim;
+using UnityModManagerNet;
+using AdofaiIpc.Migration;
 
 internal static class Program
 {
@@ -22,6 +24,8 @@ internal static class Program
       Run("cross-bootstrap BCL registry protocol", TestCrossBootstrapRegistry);
       Run("atomic bootstrap state and backup recovery", TestStateRecovery);
       Run("bootstrap trial staging and discard", TestTrial);
+      Run("legacy package seed migration", TestSeedMigration);
+      Run("legacy dependent mod transition", TestDependentTransition);
       Run("lockstep product version", TestLockstepVersion);
       Console.WriteLine($"Passed {_passed} bootstrap tests.");
       return 0;
@@ -104,6 +108,44 @@ internal static class Program
     Assert(BootstrapStateStore.Read(directory.Path).Trial == version, "Trial was not recorded.");
     DependencyShim.DiscardTrial(directory.Path, version);
     Assert(BootstrapStateStore.Read(directory.Path).Trial == null, "Trial was not discarded.");
+  }
+
+  private static void TestSeedMigration()
+  {
+    using TemporaryDirectory directory = new();
+    File.WriteAllText(Path.Combine(directory.Path, "Info.json"),
+      "{\"Id\":\"Fixture\",\"DisplayName\":\"Fixture\",\"Version\":\"1.0.0\",\"AssemblyName\":\"Assets/AdofaiIpc/AdofaiIpc.DependencyShim.dll\",\"EntryMethod\":\"AdofaiIpc.DependencyShim.DependencyShim.Load\"}");
+    UnityModManager.ModInfo info = JsonConvert.DeserializeObject<UnityModManager.ModInfo>(
+      File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
+    UnityModManager.ModEntry owner = new(info, directory.Path + Path.DirectorySeparatorChar);
+    string version = DependencyShim.Seed(owner, typeof(Bootstrap).Assembly.Location);
+    Assert(version == "0.3.0", "Seed did not preserve the bootstrap product version.");
+    Assert(File.Exists(Path.Combine(directory.Path, "AdofaiIpc.DependencyShim.dll")), "Seed did not install the fixed shim.");
+    Assert(File.Exists(Path.Combine(directory.Path, "DependencyBootstrap", "versions", version,
+      "AdofaiIpc.Bootstrap.dll")), "Seed did not install the bootstrap candidate.");
+    dynamic migrated = JsonConvert.DeserializeObject(File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
+    Assert((string)migrated.AssemblyName == "AdofaiIpc.DependencyShim.dll", "Seed did not switch Info.json last.");
+    migrated.AssemblyName = "Assets/AdofaiIpc/AdofaiIpc.DependencyShim.dll";
+    File.WriteAllText(Path.Combine(directory.Path, "Info.json"), JsonConvert.SerializeObject(migrated));
+    Assert(!TransitionMigration.Prepare(owner), "A complete fresh install was treated as a legacy transition.");
+    dynamic canonical = JsonConvert.DeserializeObject(File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
+    Assert((string)canonical.AssemblyName == "AdofaiIpc.DependencyShim.dll",
+      "Fresh-install seed entrypoint was not normalized.");
+  }
+
+  private static void TestDependentTransition()
+  {
+    using TemporaryDirectory directory = new();
+    File.WriteAllText(Path.Combine(directory.Path, "Info.json"),
+      "{\"Id\":\"LegacyMod\",\"DisplayName\":\"Legacy Mod\",\"Version\":\"1.0.0\",\"AssemblyName\":\"AdofaiIpc.Bootstrap.dll\",\"EntryMethod\":\"AdofaiIpc.Bootstrap.Bootstrap.Load\"}");
+    UnityModManager.ModInfo info = JsonConvert.DeserializeObject<UnityModManager.ModInfo>(
+      File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
+    UnityModManager.ModEntry owner = new(info, directory.Path + Path.DirectorySeparatorChar);
+    Assert(TransitionMigration.Prepare(owner), "Legacy dependent mod was not migrated.");
+    Assert(!TransitionMigration.Prepare(owner), "Completed migration was not idempotent.");
+    dynamic migrated = JsonConvert.DeserializeObject(File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
+    Assert((string)migrated.EntryMethod == "AdofaiIpc.DependencyShim.DependencyShim.Load",
+      "Dependent mod entrypoint was not switched.");
   }
 
   private static void TestLockstepVersion()

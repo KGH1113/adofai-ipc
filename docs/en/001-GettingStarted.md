@@ -31,10 +31,11 @@ Required components:
 - UnityModManager
 - AdofaiIpc installed at `Mods/AdofaiIpc`
 
-Mods that use the public API must reference `AdofaiIpc.dll` when they are built.
+Mods that use the public API must reference the versioned `AdofaiIpc.dll` build artifact.
 Mods using the dependency shim can install the latest package from GitHub Releases when
-AdofaiIpc is missing. Dependency errors are aggregated into one in-game dialog. Existing
-dependent mods must be manually reinstalled once to adopt the fixed shim layout.
+AdofaiIpc is missing. Dependency errors are aggregated into one in-game dialog. The bridge
+releases migrate existing dependent mods automatically; existing AdofaiIpc 0.2.0 users reinstall
+only AdofaiIpc once.
 
 ---
 

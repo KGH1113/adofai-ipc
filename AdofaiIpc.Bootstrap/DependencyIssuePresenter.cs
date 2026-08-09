@@ -222,6 +222,8 @@ internal sealed class DependencyIssueView : MonoBehaviour
         : "Enable AdofaiIPC in Unity Mod Manager, then restart.",
       "Outdated" => korean ? $"설치 버전 {installed}은(는) 너무 오래되었습니다. 다시 설치하고 재시작하세요."
         : $"Installed version {installed} is outdated. Reinstall and restart.",
+      "MigrationRequired" => korean ? "이번 한 번만 AdofaiIPC를 다시 설치하고 게임을 완전히 종료한 뒤 재실행하세요."
+        : "Reinstall AdofaiIPC once, fully quit the game, then start it again.",
       _ => korean ? "AdofaiIPC 로드에 실패했습니다. UMM 로그를 확인하고 다시 설치하세요."
         : "AdofaiIPC failed to load. Check the UMM log and reinstall it."
     };
