@@ -267,6 +267,7 @@ internal static class Ui
     Image background = Image(label, parent, new Color(.18f, .42f, .78f, 1f));
     Button button = background.gameObject.AddComponent<Button>();
     Text text = Text("Label", background.transform, 20, FontStyle.Bold, TextAnchor.MiddleCenter);
+    text.text = label;
     Stretch(text.rectTransform);
     return button;
   }

@@ -20,7 +20,7 @@ internal static class DependencyCoordinator
       DependencyIssue issue = DependencyProbe.Probe(owner, manifest);
       if (issue != null)
       {
-        Report(owner, issue, mainThread);
+        Report(owner, issue, displayName, mainThread);
         return;
       }
 
@@ -30,7 +30,7 @@ internal static class DependencyCoordinator
         catch (Exception exception)
         {
           Report(owner, DependencyProbe.Issue(owner, manifest, DependencyIssueKind.InstallFailure,
-            null, exception.Message), mainThread);
+            null, exception.Message), displayName, mainThread);
           return;
         }
       }
@@ -38,7 +38,7 @@ internal static class DependencyCoordinator
       issue = DependencyProbe.Probe(owner, manifest);
       if (issue != null)
       {
-        Report(owner, issue, mainThread);
+        Report(owner, issue, displayName, mainThread);
         return;
       }
 
@@ -50,7 +50,7 @@ internal static class DependencyCoordinator
       catch (Exception exception)
       {
         Report(owner, DependencyProbe.Issue(owner, manifest, DependencyIssueKind.LoadFailure,
-          ModActivator.Find()?.Info.Version, exception.Message), mainThread);
+          ModActivator.Find()?.Info.Version, exception.Message), displayName, mainThread);
         return;
       }
 
@@ -72,7 +72,7 @@ internal static class DependencyCoordinator
       owner.Logger.Error(exception.ToString());
       if (manifest != null)
         Report(owner, DependencyProbe.Issue(owner, manifest, DependencyIssueKind.LoadFailure,
-          ModActivator.Find()?.Info.Version, exception.Message), mainThread);
+          ModActivator.Find()?.Info.Version, exception.Message), displayName, mainThread);
     }
   }
 
@@ -88,11 +88,12 @@ internal static class DependencyCoordinator
     }
   }
 
-  private static void Report(UnityModManager.ModEntry owner, DependencyIssue issue,
+  private static void Report(UnityModManager.ModEntry owner, DependencyIssue issue, string displayName,
     SynchronizationContext mainThread)
   {
     owner.Info.DisplayName = Bootstrap.Status(owner, "AdofaiIpc Error");
     owner.Logger.Error(issue.Detail);
+    issue.DisplayName = displayName;
     DependencyIssueRegistry.Report(issue);
     DependencyIssuePresenter.RequestRefresh(mainThread, owner.Logger);
   }
