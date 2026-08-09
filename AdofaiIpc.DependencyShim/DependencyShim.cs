@@ -10,6 +10,8 @@ namespace AdofaiIpc.DependencyShim;
 
 public static class DependencyShim
 {
+  private const string ManifestName = "AdofaiIpcBootstrap.json";
+  private const string PendingManifestName = "AdofaiIpcBootstrap.json.pending";
   private static readonly object Sync = new();
   private static readonly HashSet<string> LoadedOwners = new(StringComparer.Ordinal);
 
@@ -18,6 +20,7 @@ public static class DependencyShim
     lock (Sync)
     {
       if (LoadedOwners.Contains(owner.Info.Id)) return true;
+      PromotePendingManifest(owner.Path);
       BootstrapState state;
       try { state = BootstrapStateStore.Read(owner.Path); }
       catch (FileNotFoundException)
@@ -74,6 +77,19 @@ public static class DependencyShim
   }
 
   public static string Seed(UnityModManager.ModEntry owner, string sourceBootstrapPath)
+    => SeedCore(owner, sourceBootstrapPath);
+
+  public static string Seed(
+    UnityModManager.ModEntry owner,
+    string sourceBootstrapPath,
+    string sourceManifestPath)
+  {
+    if (owner == null) throw new ArgumentNullException(nameof(owner));
+    StagePendingManifest(owner.Path, sourceManifestPath);
+    return SeedCore(owner, sourceBootstrapPath);
+  }
+
+  private static string SeedCore(UnityModManager.ModEntry owner, string sourceBootstrapPath)
   {
     if (owner == null) throw new ArgumentNullException(nameof(owner));
     string bootstrap = Path.GetFullPath(sourceBootstrapPath);
@@ -194,5 +210,35 @@ public static class DependencyShim
     File.WriteAllText(temporary, info.ToString());
     if (File.Exists(infoPath)) File.Replace(temporary, infoPath, infoPath + ".bak", true);
     else File.Move(temporary, infoPath);
+  }
+
+  private static void StagePendingManifest(string modRoot, string sourceManifestPath)
+  {
+    string source = Path.GetFullPath(sourceManifestPath);
+    ValidateManifest(source);
+    string pending = Path.Combine(modRoot, PendingManifestName);
+    string temporary = pending + ".tmp-" + Guid.NewGuid().ToString("N");
+    File.Copy(source, temporary, false);
+    ValidateManifest(temporary);
+    if (File.Exists(pending)) File.Replace(temporary, pending, null, true);
+    else File.Move(temporary, pending);
+  }
+
+  private static void PromotePendingManifest(string modRoot)
+  {
+    string pending = Path.Combine(modRoot, PendingManifestName);
+    if (!File.Exists(pending)) return;
+    ValidateManifest(pending);
+    string manifest = Path.Combine(modRoot, ManifestName);
+    if (File.Exists(manifest)) File.Replace(pending, manifest, manifest + ".bak", true);
+    else File.Move(pending, manifest);
+  }
+
+  private static void ValidateManifest(string path)
+  {
+    JObject manifest = JObject.Parse(File.ReadAllText(path));
+    foreach (string property in new[] { "MinimumAdofaiIpcVersion", "AssemblyName", "EntryMethod" })
+      if (string.IsNullOrWhiteSpace((string)manifest[property]))
+        throw new InvalidDataException("Dependency manifest is missing " + property + ".");
   }
 }

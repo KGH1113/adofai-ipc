@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Diagnostics;
+using System.Reflection;
 using Newtonsoft.Json;
 using AdofaiIpc.Bootstrap;
 using AdofaiIpc.DependencyShim;
@@ -136,6 +137,10 @@ internal static class Program
   private static void TestDependentTransition()
   {
     using TemporaryDirectory directory = new();
+    string payloadManifest = Path.Combine(Path.GetDirectoryName(typeof(TransitionMigration).Assembly.Location),
+      "AdofaiIpcBootstrap.json");
+    File.WriteAllText(payloadManifest,
+      "{\"MinimumAdofaiIpcVersion\":\"0.3.0\",\"AssemblyName\":\"Core.dll\",\"EntryMethod\":\"Core.Load\"}");
     File.WriteAllText(Path.Combine(directory.Path, "Info.json"),
       "{\"Id\":\"LegacyMod\",\"DisplayName\":\"Legacy Mod\",\"Version\":\"1.0.0\",\"AssemblyName\":\"AdofaiIpc.Bootstrap.dll\",\"EntryMethod\":\"AdofaiIpc.Bootstrap.Bootstrap.Load\"}");
     UnityModManager.ModInfo info = JsonConvert.DeserializeObject<UnityModManager.ModInfo>(
@@ -146,6 +151,15 @@ internal static class Program
     dynamic migrated = JsonConvert.DeserializeObject(File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
     Assert((string)migrated.EntryMethod == "AdofaiIpc.DependencyShim.DependencyShim.Load",
       "Dependent mod entrypoint was not switched.");
+    Assert(File.Exists(Path.Combine(directory.Path, "AdofaiIpcBootstrap.json.pending")),
+      "The replacement dependency manifest was not staged.");
+    typeof(DependencyShim).GetMethod("PromotePendingManifest", BindingFlags.NonPublic | BindingFlags.Static)
+      ?.Invoke(null, new object[] { directory.Path });
+    dynamic manifest = JsonConvert.DeserializeObject(
+      File.ReadAllText(Path.Combine(directory.Path, "AdofaiIpcBootstrap.json")));
+    Assert((string)manifest.MinimumAdofaiIpcVersion == "0.3.0",
+      "The replacement dependency manifest was not activated by the shim.");
+    File.Delete(payloadManifest);
   }
 
   private static void TestLockstepVersion()

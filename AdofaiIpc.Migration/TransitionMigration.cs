@@ -54,15 +54,16 @@ public static class TransitionMigration
     string sourceDirectory = Path.GetDirectoryName(typeof(TransitionMigration).Assembly.Location);
     string shimPath = Path.Combine(sourceDirectory, "AdofaiIpc.DependencyShim.dll");
     string bootstrapPath = Path.Combine(sourceDirectory, "AdofaiIpc.Bootstrap.dll");
-    if (!File.Exists(shimPath) || !File.Exists(bootstrapPath))
+    string manifestPath = Path.Combine(sourceDirectory, "AdofaiIpcBootstrap.json");
+    if (!File.Exists(shimPath) || !File.Exists(bootstrapPath) || !File.Exists(manifestPath))
       throw new FileNotFoundException("AdofaiIpc migration payload is incomplete.");
 
     Assembly shim = Assembly.LoadFrom(shimPath);
     Type type = shim.GetType("AdofaiIpc.DependencyShim.DependencyShim", true);
     MethodInfo seed = type.GetMethod("Seed", BindingFlags.Public | BindingFlags.Static, null,
-      new[] { typeof(UnityModManager.ModEntry), typeof(string) }, null) ??
+      new[] { typeof(UnityModManager.ModEntry), typeof(string), typeof(string) }, null) ??
       throw new MissingMethodException(type.FullName, "Seed");
-    version = (string)seed.Invoke(null, new object[] { owner, bootstrapPath });
+    version = (string)seed.Invoke(null, new object[] { owner, bootstrapPath, manifestPath });
     return true;
   }
 
