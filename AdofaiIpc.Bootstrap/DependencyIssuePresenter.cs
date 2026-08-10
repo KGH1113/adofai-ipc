@@ -87,9 +87,10 @@ internal sealed class DependencyIssueView : MonoBehaviour
     DependencyDialogUi.Stretch(panel.rectTransform);
     panel.rectTransform.offsetMin = new Vector2(2f, 2f);
     panel.rectTransform.offsetMax = new Vector2(-2f, -2f);
+    DependencyDialogUi.ClipChildrenToRoundedShape(panel);
 
     Image accent = DependencyDialogUi.Image("Accent", panel.transform, DependencyDialogUi.Warning);
-    DependencyDialogUi.Place(accent.rectTransform, 12f, 0f, 656f, 3f);
+    DependencyDialogUi.Place(accent.rectTransform, 0f, 0f, 680f, 4f);
     Image badge = DependencyDialogUi.Image("Warning badge", panel.transform,
       new Color(1f, .69f, .25f, .14f), true);
     DependencyDialogUi.Place(badge.rectTransform, 30f, 28f, 46f, 46f);
@@ -118,9 +119,10 @@ internal sealed class DependencyIssueView : MonoBehaviour
     Image guide = DependencyDialogUi.Image("Next step", panel.transform,
       new Color(.14f, .25f, .42f, .72f), true);
     DependencyDialogUi.Place(guide.rectTransform, 30f, 316f, 620f, 92f);
+    DependencyDialogUi.ClipChildrenToRoundedShape(guide);
     Image guideAccent = DependencyDialogUi.Image("Next step accent", guide.transform,
       DependencyDialogUi.Accent);
-    DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 12f, 3f, 68f);
+    DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 92f);
     _steps = new DependencyDialogSteps(guide.transform);
 
     Button close = DependencyDialogUi.Button(IsKorean() ? "닫기" : "Close", panel.transform, false);

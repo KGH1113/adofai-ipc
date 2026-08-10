@@ -45,6 +45,12 @@ internal static class DependencyDialogUi
     return image;
   }
 
+  internal static void ClipChildrenToRoundedShape(Image image)
+  {
+    Mask mask = image.gameObject.AddComponent<Mask>();
+    mask.showMaskGraphic = true;
+  }
+
   internal static Text Text(
     string name,
     Transform parent,
