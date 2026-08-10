@@ -271,19 +271,19 @@ internal sealed class DependencyDialogModList
       Text name = DependencyDialogUi.Text("Name", row.transform, 16, FontStyle.Bold,
         TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
       name.text = item.Name;
-      DependencyDialogUi.Place(name.rectTransform, 4f, 3f, 350f, 24f);
+      DependencyDialogUi.Place(name.rectTransform, 4f, 8f, 350f, 24f);
       Text requirement = DependencyDialogUi.Text("Requirement", row.transform, 13, FontStyle.Bold,
         TextAnchor.MiddleRight, DependencyDialogUi.Accent);
       requirement.text = item.Requirement;
-      DependencyDialogUi.Place(requirement.rectTransform, 354f, 3f, 230f, 24f);
+      DependencyDialogUi.Place(requirement.rectTransform, 354f, 8f, 230f, 24f);
       Text status = DependencyDialogUi.Text("Status", row.transform, 13, FontStyle.Normal,
         TextAnchor.MiddleLeft, DependencyDialogUi.SecondaryText);
       status.text = item.Status;
-      DependencyDialogUi.Place(status.rectTransform, 4f, 27f, 580f, 22f);
+      DependencyDialogUi.Place(status.rectTransform, 4f, 32f, 580f, 22f);
       if (index + 1 < items.Count)
       {
         Image divider = DependencyDialogUi.Image("Divider", row.transform, new Color(.24f, .28f, .36f, .65f));
-        DependencyDialogUi.Place(divider.rectTransform, 4f, rowHeight - 7f, 580f, 1f);
+        DependencyDialogUi.Place(divider.rectTransform, 4f, rowHeight - 1f, 580f, 1f);
       }
     }
   }
