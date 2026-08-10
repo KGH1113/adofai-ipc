@@ -283,7 +283,7 @@ internal sealed class DependencyDialogModList
       if (index + 1 < items.Count)
       {
         Image divider = DependencyDialogUi.Image("Divider", row.transform, new Color(.24f, .28f, .36f, .65f));
-        DependencyDialogUi.Place(divider.rectTransform, 4f, rowHeight - 1f, 580f, 1f);
+        DependencyDialogUi.Place(divider.rectTransform, 4f, rowHeight - 7f, 580f, 1f);
       }
     }
   }
