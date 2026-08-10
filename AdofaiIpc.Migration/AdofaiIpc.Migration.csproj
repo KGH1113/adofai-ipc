@@ -15,6 +15,7 @@
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../AdofaiIpc.Shared/DependencyDialogUi.cs" Link="Shared/DependencyDialogUi.cs" />
     <Reference Include="UnityModManager"><HintPath>$(UnityModManagerDll)</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(AdofaiManaged)/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(AdofaiManaged)/UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>

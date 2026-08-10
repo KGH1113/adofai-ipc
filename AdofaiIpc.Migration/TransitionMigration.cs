@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using AdofaiIpc.SharedUi;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -135,7 +136,7 @@ public static class TransitionMigration
       Canvas canvas = root.AddComponent<Canvas>();
       canvas.renderMode = RenderMode.ScreenSpaceOverlay;
       canvas.sortingOrder = short.MaxValue;
-      root.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+      DependencyDialogUi.ConfigureCanvas(root.AddComponent<CanvasScaler>());
       root.AddComponent<GraphicRaycaster>();
       root.AddComponent<MigrationView>().Build();
       lock (AppDomain.CurrentDomain)
@@ -149,7 +150,11 @@ public static class TransitionMigration
 
   private sealed class MigrationView : MonoBehaviour
   {
-    private Text _body;
+    private Text _badge;
+    private Text _description;
+    private Text _guideText;
+    private Text _guideTitle;
+    private Text _mods;
     private Text _title;
     private Canvas _canvas;
     private bool _closed;
@@ -158,25 +163,64 @@ public static class TransitionMigration
     public void Build()
     {
       _canvas = GetComponent<Canvas>();
-      Image blocker = Image("Input blocker", transform, new Color(0f, 0f, 0f, .72f));
-      Stretch(blocker.rectTransform);
-      Image panel = Image("Panel", blocker.transform, new Color(.075f, .085f, .11f, .98f));
-      panel.rectTransform.anchorMin = panel.rectTransform.anchorMax = new Vector2(.5f, .5f);
-      panel.rectTransform.sizeDelta = new Vector2(760f, 470f);
-      VerticalLayoutGroup layout = panel.gameObject.AddComponent<VerticalLayoutGroup>();
-      layout.padding = new RectOffset(36, 36, 30, 28); layout.spacing = 18f;
-      layout.childControlHeight = true; layout.childControlWidth = true; layout.childForceExpandHeight = false;
-      _title = Text("Title", panel.transform, 30, FontStyle.Bold, TextAnchor.MiddleLeft);
-      _title.gameObject.AddComponent<LayoutElement>().preferredHeight = 48f;
-      _body = Text("Body", panel.transform, 20, FontStyle.Normal, TextAnchor.UpperLeft);
-      _body.gameObject.AddComponent<LayoutElement>().minHeight = 270f;
-      GameObject buttons = new("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-      buttons.transform.SetParent(panel.transform, false);
-      buttons.GetComponent<HorizontalLayoutGroup>().spacing = 12f;
-      buttons.AddComponent<LayoutElement>().preferredHeight = 52f;
-      Button download = Button(Korean() ? "AdofaiIPC 다운로드" : "Download AdofaiIPC", buttons.transform);
+      Image blocker = DependencyDialogUi.Image("Input blocker", transform, DependencyDialogUi.Backdrop);
+      DependencyDialogUi.Stretch(blocker.rectTransform);
+      Image shadow = DependencyDialogUi.Image("Shadow", blocker.transform, DependencyDialogUi.Shadow, true);
+      DependencyDialogUi.Center(shadow.rectTransform, 692f, 464f, -9f);
+      Image border = DependencyDialogUi.Image("Border", blocker.transform, DependencyDialogUi.Border, true);
+      DependencyDialogUi.Center(border.rectTransform, 684f, 456f);
+      Image panel = DependencyDialogUi.Image("Panel", border.transform, DependencyDialogUi.Surface, true);
+      DependencyDialogUi.Stretch(panel.rectTransform);
+      panel.rectTransform.offsetMin = new Vector2(2f, 2f);
+      panel.rectTransform.offsetMax = new Vector2(-2f, -2f);
+      Image accent = DependencyDialogUi.Image("Accent", panel.transform, DependencyDialogUi.Warning, true);
+      DependencyDialogUi.Place(accent.rectTransform, 0f, 0f, 680f, 4f);
+      Image badge = DependencyDialogUi.Image("Warning badge", panel.transform,
+        new Color(1f, .69f, .25f, .14f), true);
+      DependencyDialogUi.Place(badge.rectTransform, 30f, 28f, 46f, 46f);
+      _badge = DependencyDialogUi.Text("Warning mark", badge.transform, 25, FontStyle.Bold,
+        TextAnchor.MiddleCenter, DependencyDialogUi.Warning);
+      _badge.text = "!";
+      DependencyDialogUi.Stretch(_badge.rectTransform);
+      _title = DependencyDialogUi.Text("Title", panel.transform, 27, FontStyle.Bold,
+        TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
+      DependencyDialogUi.Place(_title.rectTransform, 92f, 25f, 540f, 36f);
+      _description = DependencyDialogUi.Text("Description", panel.transform, 15, FontStyle.Normal,
+        TextAnchor.UpperLeft, DependencyDialogUi.SecondaryText);
+      DependencyDialogUi.Place(_description.rectTransform, 92f, 62f, 540f, 46f);
+      Image divider = DependencyDialogUi.Image("Divider", panel.transform, new Color(.24f, .28f, .36f, .72f));
+      DependencyDialogUi.Place(divider.rectTransform, 30f, 120f, 620f, 1f);
+      Text section = DependencyDialogUi.Text("Affected mods label", panel.transform, 12, FontStyle.Bold,
+        TextAnchor.MiddleLeft, DependencyDialogUi.MutedText);
+      section.text = Korean() ? "영향받는 모드" : "AFFECTED MODS";
+      DependencyDialogUi.Place(section.rectTransform, 32f, 136f, 300f, 20f);
+      Image modsPanel = DependencyDialogUi.Image("Affected mods", panel.transform,
+        DependencyDialogUi.Raised, true);
+      DependencyDialogUi.Place(modsPanel.rectTransform, 30f, 160f, 620f, 112f);
+      _mods = DependencyDialogUi.Text("Affected mod list", modsPanel.transform, 15, FontStyle.Normal,
+        TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
+      DependencyDialogUi.Place(_mods.rectTransform, 18f, 10f, 584f, 92f);
+      _mods.resizeTextForBestFit = true;
+      _mods.resizeTextMinSize = 12;
+      _mods.resizeTextMaxSize = 15;
+      Image guide = DependencyDialogUi.Image("Next step", panel.transform,
+        new Color(.14f, .25f, .42f, .72f), true);
+      DependencyDialogUi.Place(guide.rectTransform, 30f, 288f, 620f, 70f);
+      Image guideAccent = DependencyDialogUi.Image("Next step accent", guide.transform,
+        DependencyDialogUi.Accent, true);
+      DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 70f);
+      _guideTitle = DependencyDialogUi.Text("Next step title", guide.transform, 12, FontStyle.Bold,
+        TextAnchor.MiddleLeft, DependencyDialogUi.Accent);
+      DependencyDialogUi.Place(_guideTitle.rectTransform, 20f, 8f, 570f, 20f);
+      _guideText = DependencyDialogUi.Text("Next step text", guide.transform, 14, FontStyle.Normal,
+        TextAnchor.UpperLeft, DependencyDialogUi.PrimaryText);
+      DependencyDialogUi.Place(_guideText.rectTransform, 20f, 30f, 570f, 32f);
+      Button close = DependencyDialogUi.Button(Korean() ? "닫기" : "Close", panel.transform, false);
+      DependencyDialogUi.Place(close.GetComponent<RectTransform>(), 344f, 382f, 108f, 42f);
+      Button download = DependencyDialogUi.Button(
+        Korean() ? "AdofaiIPC 다운로드" : "Download AdofaiIPC", panel.transform, true);
+      DependencyDialogUi.Place(download.GetComponent<RectTransform>(), 464f, 382f, 186f, 42f);
       download.onClick.AddListener(() => Application.OpenURL(ReleaseUrl));
-      Button close = Button(Korean() ? "닫기" : "Close", buttons.transform);
       close.onClick.AddListener(() => { _closed = true; _canvas.enabled = false; });
       if (Resources.FindObjectsOfTypeAll<EventSystem>().Length == 0)
       { gameObject.AddComponent<EventSystem>(); gameObject.AddComponent<StandaloneInputModule>(); }
@@ -185,26 +229,33 @@ public static class TransitionMigration
 
     public void RefreshFromSharedRegistry()
     {
-      if (_body == null) return;
+      if (_mods == null) return;
       bool korean = Korean();
       Hashtable root = (Hashtable)AppDomain.CurrentDomain.GetData(RegistryKey);
       Hashtable issues = (Hashtable)root["issues"];
       bool reinstall = issues.Values.Cast<Hashtable>().Any(RequiresReinstall);
       string names = string.Join("\n", issues.Values.Cast<Hashtable>()
         .OrderBy(row => (string)row["displayName"])
-        .Select(row => "• " + row["displayName"] + " (AdofaiIPC " + row["minimumVersion"] + "+)"));
+        .Select(row => "<b>" + Escape(row["displayName"] as string) + "</b>   <color=#7E8AA1>" +
+                       (korean ? "최소 " : "minimum ") + Escape(row["minimumVersion"] as string) +
+                       "</color>\n<color=#AEB8C9>" +
+                       (korean ? "이번 실행에서는 시작되지 않습니다." : "Not started in this session.") +
+                       "</color>"));
       _title.text = korean
         ? reinstall ? "AdofaiIPC를 한 번 다시 설치해야 합니다" : "전환 준비가 끝났습니다"
         : reinstall ? "Reinstall AdofaiIPC once" : "Migration is ready";
-      _body.text = korean
-        ? "이번 실행에서는 아래 모드가 시작되지 않습니다.\n\n" + names +
-          (reinstall
-            ? "\n\n1. 최신 AdofaiIPC를 다운로드해 다시 설치하세요.\n2. 게임을 완전히 종료하세요.\n3. 게임을 다시 실행하세요.\n\n지금 재설치하면 게임 재시작은 한 번만 필요합니다."
-            : "\n\nAdofaiIPC는 이미 최신입니다. 게임을 완전히 종료한 뒤 다시 실행하면 됩니다.")
-        : "The following mods were not started in this session.\n\n" + names +
-          (reinstall
-            ? "\n\n1. Download and reinstall the latest AdofaiIPC.\n2. Fully quit the game.\n3. Start the game again.\n\nIf you reinstall now, only one restart is needed."
-            : "\n\nAdofaiIPC is already current. Fully quit the game, then start it again.");
+      _description.text = korean
+        ? "새 의존성 구조로 전환하는 동안 아래 모드는 안전하게 중단되었습니다."
+        : "The mods below were safely paused while the dependency setup is migrated.";
+      _mods.text = names;
+      _guideTitle.text = korean ? "다음 단계" : "NEXT STEP";
+      _guideText.text = korean
+        ? reinstall
+          ? "최신 AdofaiIPC 재설치 → 게임 완전 종료 → 재실행"
+          : "게임 완전 종료 → 재실행"
+        : reinstall
+          ? "Reinstall the latest AdofaiIPC → fully quit → start again"
+          : "Fully quit the game → start again";
       ApplyFont();
       if (!_closed) _canvas.enabled = true;
     }
@@ -220,26 +271,15 @@ public static class TransitionMigration
 
     private void ApplyFont()
     {
-      Text[] texts = GetComponentsInChildren<Text>(true);
-      try
+      if (DependencyDialogUi.ApplyFonts(transform, _title, _badge))
       {
-        Type rd = Type.GetType("RDString, Assembly-CSharp");
-        rd?.GetMethod("Setup", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
-        MethodInfo method = rd?.GetMethod("SetLocalizedFont", BindingFlags.Public | BindingFlags.Static,
-          null, new[] { typeof(Text) }, null);
-        if (method != null)
+        if (_fontRetryRegistered)
         {
-          foreach (Text text in texts) method.Invoke(null, new object[] { text });
-          if (texts.Length > 0 && texts.All(text => text.font != null))
-          {
-            if (_fontRetryRegistered) { SceneManager.sceneLoaded -= OnSceneLoaded; _fontRetryRegistered = false; }
-            return;
-          }
+          SceneManager.sceneLoaded -= OnSceneLoaded;
+          _fontRetryRegistered = false;
         }
+        return;
       }
-      catch { }
-      Font font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-      if (font != null) foreach (Text text in texts) text.font = font;
       if (!_fontRetryRegistered) { SceneManager.sceneLoaded += OnSceneLoaded; _fontRetryRegistered = true; }
     }
 
@@ -247,26 +287,8 @@ public static class TransitionMigration
     private void OnDestroy()
     { if (_fontRetryRegistered) SceneManager.sceneLoaded -= OnSceneLoaded; }
 
-    private static bool Korean()
-    {
-      try
-      {
-        Type rd = Type.GetType("RDString, Assembly-CSharp");
-        rd?.GetMethod("Setup", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
-        object language = rd?.GetField("language", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) ??
-                          rd?.GetProperty("language", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-        return language != null && language.ToString().IndexOf("korean", StringComparison.OrdinalIgnoreCase) >= 0;
-      }
-      catch { return false; }
-    }
-
-    private static Image Image(string name, Transform parent, Color color)
-    { GameObject go = new(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)); go.transform.SetParent(parent, false); Image image = go.GetComponent<Image>(); image.color = color; return image; }
-    private static Text Text(string name, Transform parent, int size, FontStyle style, TextAnchor anchor)
-    { GameObject go = new(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text)); go.transform.SetParent(parent, false); Text text = go.GetComponent<Text>(); text.fontSize = size; text.fontStyle = style; text.alignment = anchor; text.color = Color.white; text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow; return text; }
-    private static Button Button(string label, Transform parent)
-    { Image image = Image(label, parent, new Color(.18f, .42f, .78f, 1f)); Button button = image.gameObject.AddComponent<Button>(); Text text = Text("Label", image.transform, 20, FontStyle.Bold, TextAnchor.MiddleCenter); text.text = label; Stretch(text.rectTransform); return button; }
-    private static void Stretch(RectTransform rect)
-    { rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero; }
+    private static bool Korean() => DependencyDialogUi.IsKorean();
+    private static string Escape(string value) => (value ?? string.Empty)
+      .Replace("<", "‹").Replace(">", "›");
   }
 }

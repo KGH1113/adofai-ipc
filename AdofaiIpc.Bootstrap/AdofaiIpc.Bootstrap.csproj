@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../AdofaiIpc.Shared/DependencyDialogUi.cs" Link="Shared/DependencyDialogUi.cs" />
     <Reference Include="UnityModManager">
       <HintPath>$(UnityModManagerDll)</HintPath>
       <Private>false</Private>
