@@ -67,10 +67,9 @@ internal sealed class DependencyIssueView : MonoBehaviour
 {
   private Text _badge;
   private Text _description;
-  private Text _guideText;
-  private Text _guideTitle;
-  private Text _mods;
   private Text _title;
+  private DependencyDialogModList _modList;
+  private DependencyDialogSteps _steps;
   private Canvas _canvas;
   private bool _closed;
   private bool _fontRetryRegistered;
@@ -81,9 +80,9 @@ internal sealed class DependencyIssueView : MonoBehaviour
     Image blocker = DependencyDialogUi.Image("Input blocker", transform, DependencyDialogUi.Backdrop);
     DependencyDialogUi.Stretch(blocker.rectTransform);
     Image shadow = DependencyDialogUi.Image("Shadow", blocker.transform, DependencyDialogUi.Shadow, true);
-    DependencyDialogUi.Center(shadow.rectTransform, 692f, 464f, -9f);
+    DependencyDialogUi.Center(shadow.rectTransform, 692f, 508f, -9f);
     Image border = DependencyDialogUi.Image("Border", blocker.transform, DependencyDialogUi.Border, true);
-    DependencyDialogUi.Center(border.rectTransform, 684f, 456f);
+    DependencyDialogUi.Center(border.rectTransform, 684f, 500f);
     Image panel = DependencyDialogUi.Image("Panel", border.transform, DependencyDialogUi.Surface, true);
     DependencyDialogUi.Stretch(panel.rectTransform);
     panel.rectTransform.offsetMin = new Vector2(2f, 2f);
@@ -113,32 +112,22 @@ internal sealed class DependencyIssueView : MonoBehaviour
     DependencyDialogUi.Place(section.rectTransform, 32f, 136f, 300f, 20f);
 
     Image modsPanel = DependencyDialogUi.Image("Affected mods", panel.transform, DependencyDialogUi.Raised, true);
-    DependencyDialogUi.Place(modsPanel.rectTransform, 30f, 160f, 620f, 112f);
-    _mods = DependencyDialogUi.Text("Affected mod list", modsPanel.transform, 15, FontStyle.Normal,
-      TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
-    DependencyDialogUi.Place(_mods.rectTransform, 18f, 10f, 584f, 92f);
-    _mods.resizeTextForBestFit = true;
-    _mods.resizeTextMinSize = 12;
-    _mods.resizeTextMaxSize = 15;
+    DependencyDialogUi.Place(modsPanel.rectTransform, 30f, 160f, 620f, 140f);
+    _modList = new DependencyDialogModList(modsPanel.transform);
 
     Image guide = DependencyDialogUi.Image("Next step", panel.transform,
       new Color(.14f, .25f, .42f, .72f), true);
-    DependencyDialogUi.Place(guide.rectTransform, 30f, 288f, 620f, 70f);
+    DependencyDialogUi.Place(guide.rectTransform, 30f, 316f, 620f, 92f);
     Image guideAccent = DependencyDialogUi.Image("Next step accent", guide.transform,
       DependencyDialogUi.Accent, true);
-    DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 70f);
-    _guideTitle = DependencyDialogUi.Text("Next step title", guide.transform, 12, FontStyle.Bold,
-      TextAnchor.MiddleLeft, DependencyDialogUi.Accent);
-    DependencyDialogUi.Place(_guideTitle.rectTransform, 20f, 8f, 570f, 20f);
-    _guideText = DependencyDialogUi.Text("Next step text", guide.transform, 14, FontStyle.Normal,
-      TextAnchor.UpperLeft, DependencyDialogUi.PrimaryText);
-    DependencyDialogUi.Place(_guideText.rectTransform, 20f, 30f, 570f, 32f);
+    DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 92f);
+    _steps = new DependencyDialogSteps(guide.transform);
 
     Button close = DependencyDialogUi.Button(IsKorean() ? "닫기" : "Close", panel.transform, false);
-    DependencyDialogUi.Place(close.GetComponent<RectTransform>(), 344f, 382f, 108f, 42f);
+    DependencyDialogUi.Place(close.GetComponent<RectTransform>(), 344f, 430f, 108f, 42f);
     Button download = DependencyDialogUi.Button(
       IsKorean() ? "AdofaiIPC 다운로드" : "Download AdofaiIPC", panel.transform, true);
-    DependencyDialogUi.Place(download.GetComponent<RectTransform>(), 464f, 382f, 186f, 42f);
+    DependencyDialogUi.Place(download.GetComponent<RectTransform>(), 464f, 430f, 186f, 42f);
     download.onClick.AddListener(() => Application.OpenURL(DependencyInstaller.ReleasePageUrl));
     close.onClick.AddListener(() => { _closed = true; _canvas.enabled = false; });
     EnsureEventSystem();
@@ -147,7 +136,7 @@ internal sealed class DependencyIssueView : MonoBehaviour
 
   public void RefreshFromSharedRegistry()
   {
-    if (_mods == null) return;
+    if (_modList == null) return;
     bool korean = IsKorean();
     List<Hashtable> issues = DependencyIssueRegistry.Snapshot();
     string primaryKind = PrimaryKind(issues);
@@ -155,20 +144,22 @@ internal sealed class DependencyIssueView : MonoBehaviour
     _description.text = korean
       ? "필요한 AdofaiIPC를 사용할 수 없어 아래 모드를 이번 실행에서 시작하지 않았습니다."
       : "These mods were not started because the required AdofaiIPC is unavailable.";
-    List<string> rows = new();
+    List<DependencyDialogModItem> rows = new();
     foreach (Hashtable issue in issues)
     {
       string name = Escape((string)issue["displayName"]);
       string minimum = Escape((string)issue["minimumVersion"]);
       string kind = (string)issue["kind"];
       string installed = (string)issue["installedVersion"];
-      rows.Add("<b>" + name + "</b>   <color=#7E8AA1>" +
-               (korean ? "최소 " : "minimum ") + minimum + "</color>");
-      rows.Add("<color=#AEB8C9>" + ShortMessage(kind, installed, korean) + "</color>");
+      rows.Add(new DependencyDialogModItem
+      {
+        Name = name,
+        Requirement = korean ? "필요 버전 " + minimum + "+" : "Requires " + minimum + "+",
+        Status = ShortMessage(kind, installed, korean)
+      });
     }
-    _mods.text = string.Join("\n", rows);
-    _guideTitle.text = korean ? "다음 단계" : "NEXT STEP";
-    _guideText.text = Guide(primaryKind, HighestMinimum(issues), korean);
+    _modList.SetItems(rows);
+    _steps.Set(korean ? "다음 단계" : "NEXT STEPS", GuideSteps(primaryKind, HighestMinimum(issues), korean));
     ApplyGameFont();
     if (!_closed) _canvas.enabled = true;
   }
@@ -190,7 +181,7 @@ internal sealed class DependencyIssueView : MonoBehaviour
 
   private void ApplyGameFont()
   {
-    if (DependencyDialogUi.ApplyFonts(transform, _title, _badge))
+    if (DependencyDialogUi.ApplyFonts(transform))
     {
       if (_fontRetryRegistered)
       {
@@ -250,17 +241,17 @@ internal sealed class DependencyIssueView : MonoBehaviour
     _ => korean ? "AdofaiIPC를 시작하지 못했습니다" : "AdofaiIPC could not start"
   };
 
-  private static string Guide(string kind, string minimum, bool korean) => kind switch
+  private static string[] GuideSteps(string kind, string minimum, bool korean) => kind switch
   {
     "Disabled" => korean
-      ? "Unity Mod Manager에서 AdofaiIPC를 활성화한 뒤 게임을 다시 시작하세요."
-      : "Enable AdofaiIPC in Unity Mod Manager, then restart the game.",
+      ? new[] { "UMM에서 활성화", "게임 완전 종료", "다시 실행" }
+      : new[] { "Enable in UMM", "Fully quit game", "Start again" },
     "Outdated" or "MigrationRequired" => korean
-      ? $"AdofaiIPC {minimum} 이상 재설치 → 게임 완전 종료 → 재실행"
-      : $"Reinstall AdofaiIPC {minimum}+ → fully quit the game → start again",
+      ? new[] { $"{minimum}+ 재설치", "게임 완전 종료", "다시 실행" }
+      : new[] { $"Reinstall {minimum}+", "Fully quit game", "Start again" },
     _ => korean
-      ? "최신 AdofaiIPC를 다시 설치한 뒤 게임을 재실행하세요."
-      : "Reinstall the latest AdofaiIPC, then restart the game."
+      ? new[] { "최신 버전 재설치", "게임 완전 종료", "다시 실행" }
+      : new[] { "Reinstall latest", "Fully quit game", "Start again" }
   };
 
   private static string Escape(string value) => (value ?? string.Empty)

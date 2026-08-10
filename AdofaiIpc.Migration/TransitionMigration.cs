@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -152,10 +153,9 @@ public static class TransitionMigration
   {
     private Text _badge;
     private Text _description;
-    private Text _guideText;
-    private Text _guideTitle;
-    private Text _mods;
     private Text _title;
+    private DependencyDialogModList _modList;
+    private DependencyDialogSteps _steps;
     private Canvas _canvas;
     private bool _closed;
     private bool _fontRetryRegistered;
@@ -166,9 +166,9 @@ public static class TransitionMigration
       Image blocker = DependencyDialogUi.Image("Input blocker", transform, DependencyDialogUi.Backdrop);
       DependencyDialogUi.Stretch(blocker.rectTransform);
       Image shadow = DependencyDialogUi.Image("Shadow", blocker.transform, DependencyDialogUi.Shadow, true);
-      DependencyDialogUi.Center(shadow.rectTransform, 692f, 464f, -9f);
+      DependencyDialogUi.Center(shadow.rectTransform, 692f, 508f, -9f);
       Image border = DependencyDialogUi.Image("Border", blocker.transform, DependencyDialogUi.Border, true);
-      DependencyDialogUi.Center(border.rectTransform, 684f, 456f);
+      DependencyDialogUi.Center(border.rectTransform, 684f, 500f);
       Image panel = DependencyDialogUi.Image("Panel", border.transform, DependencyDialogUi.Surface, true);
       DependencyDialogUi.Stretch(panel.rectTransform);
       panel.rectTransform.offsetMin = new Vector2(2f, 2f);
@@ -196,30 +196,20 @@ public static class TransitionMigration
       DependencyDialogUi.Place(section.rectTransform, 32f, 136f, 300f, 20f);
       Image modsPanel = DependencyDialogUi.Image("Affected mods", panel.transform,
         DependencyDialogUi.Raised, true);
-      DependencyDialogUi.Place(modsPanel.rectTransform, 30f, 160f, 620f, 112f);
-      _mods = DependencyDialogUi.Text("Affected mod list", modsPanel.transform, 15, FontStyle.Normal,
-        TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
-      DependencyDialogUi.Place(_mods.rectTransform, 18f, 10f, 584f, 92f);
-      _mods.resizeTextForBestFit = true;
-      _mods.resizeTextMinSize = 12;
-      _mods.resizeTextMaxSize = 15;
+      DependencyDialogUi.Place(modsPanel.rectTransform, 30f, 160f, 620f, 140f);
+      _modList = new DependencyDialogModList(modsPanel.transform);
       Image guide = DependencyDialogUi.Image("Next step", panel.transform,
         new Color(.14f, .25f, .42f, .72f), true);
-      DependencyDialogUi.Place(guide.rectTransform, 30f, 288f, 620f, 70f);
+      DependencyDialogUi.Place(guide.rectTransform, 30f, 316f, 620f, 92f);
       Image guideAccent = DependencyDialogUi.Image("Next step accent", guide.transform,
         DependencyDialogUi.Accent, true);
-      DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 70f);
-      _guideTitle = DependencyDialogUi.Text("Next step title", guide.transform, 12, FontStyle.Bold,
-        TextAnchor.MiddleLeft, DependencyDialogUi.Accent);
-      DependencyDialogUi.Place(_guideTitle.rectTransform, 20f, 8f, 570f, 20f);
-      _guideText = DependencyDialogUi.Text("Next step text", guide.transform, 14, FontStyle.Normal,
-        TextAnchor.UpperLeft, DependencyDialogUi.PrimaryText);
-      DependencyDialogUi.Place(_guideText.rectTransform, 20f, 30f, 570f, 32f);
+      DependencyDialogUi.Place(guideAccent.rectTransform, 0f, 0f, 4f, 92f);
+      _steps = new DependencyDialogSteps(guide.transform);
       Button close = DependencyDialogUi.Button(Korean() ? "닫기" : "Close", panel.transform, false);
-      DependencyDialogUi.Place(close.GetComponent<RectTransform>(), 344f, 382f, 108f, 42f);
+      DependencyDialogUi.Place(close.GetComponent<RectTransform>(), 344f, 430f, 108f, 42f);
       Button download = DependencyDialogUi.Button(
         Korean() ? "AdofaiIPC 다운로드" : "Download AdofaiIPC", panel.transform, true);
-      DependencyDialogUi.Place(download.GetComponent<RectTransform>(), 464f, 382f, 186f, 42f);
+      DependencyDialogUi.Place(download.GetComponent<RectTransform>(), 464f, 430f, 186f, 42f);
       download.onClick.AddListener(() => Application.OpenURL(ReleaseUrl));
       close.onClick.AddListener(() => { _closed = true; _canvas.enabled = false; });
       if (Resources.FindObjectsOfTypeAll<EventSystem>().Length == 0)
@@ -229,33 +219,35 @@ public static class TransitionMigration
 
     public void RefreshFromSharedRegistry()
     {
-      if (_mods == null) return;
+      if (_modList == null) return;
       bool korean = Korean();
       Hashtable root = (Hashtable)AppDomain.CurrentDomain.GetData(RegistryKey);
       Hashtable issues = (Hashtable)root["issues"];
       bool reinstall = issues.Values.Cast<Hashtable>().Any(RequiresReinstall);
-      string names = string.Join("\n", issues.Values.Cast<Hashtable>()
+      List<DependencyDialogModItem> mods = issues.Values.Cast<Hashtable>()
         .OrderBy(row => (string)row["displayName"])
-        .Select(row => "<b>" + Escape(row["displayName"] as string) + "</b>   <color=#7E8AA1>" +
-                       (korean ? "최소 " : "minimum ") + Escape(row["minimumVersion"] as string) +
-                       "</color>\n<color=#AEB8C9>" +
-                       (korean ? "이번 실행에서는 시작되지 않습니다." : "Not started in this session.") +
-                       "</color>"));
+        .Select(row => new DependencyDialogModItem
+        {
+          Name = Escape(row["displayName"] as string),
+          Requirement = korean
+            ? "필요 버전 " + Escape(row["minimumVersion"] as string) + "+"
+            : "Requires " + Escape(row["minimumVersion"] as string) + "+",
+          Status = korean ? "이번 실행에서는 시작되지 않습니다." : "Not started in this session."
+        }).ToList();
       _title.text = korean
         ? reinstall ? "AdofaiIPC를 한 번 다시 설치해야 합니다" : "전환 준비가 끝났습니다"
         : reinstall ? "Reinstall AdofaiIPC once" : "Migration is ready";
       _description.text = korean
         ? "새 의존성 구조로 전환하는 동안 아래 모드는 안전하게 중단되었습니다."
         : "The mods below were safely paused while the dependency setup is migrated.";
-      _mods.text = names;
-      _guideTitle.text = korean ? "다음 단계" : "NEXT STEP";
-      _guideText.text = korean
+      _modList.SetItems(mods);
+      _steps.Set(korean ? "다음 단계" : "NEXT STEPS", korean
         ? reinstall
-          ? "최신 AdofaiIPC 재설치 → 게임 완전 종료 → 재실행"
-          : "게임 완전 종료 → 재실행"
+          ? new[] { "최신 버전 재설치", "게임 완전 종료", "다시 실행" }
+          : new[] { "게임 완전 종료", "다시 실행" }
         : reinstall
-          ? "Reinstall the latest AdofaiIPC → fully quit → start again"
-          : "Fully quit the game → start again";
+          ? new[] { "Reinstall latest", "Fully quit game", "Start again" }
+          : new[] { "Fully quit game", "Start again" });
       ApplyFont();
       if (!_closed) _canvas.enabled = true;
     }
@@ -271,7 +263,7 @@ public static class TransitionMigration
 
     private void ApplyFont()
     {
-      if (DependencyDialogUi.ApplyFonts(transform, _title, _badge))
+      if (DependencyDialogUi.ApplyFonts(transform))
       {
         if (_fontRetryRegistered)
         {

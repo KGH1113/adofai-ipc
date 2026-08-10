@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,6 +21,7 @@ internal static class DependencyDialogUi
   internal static readonly Color MutedText = new(.48f, .54f, .65f, 1f);
 
   private static Sprite _roundedSprite;
+  private static Font _readableFont;
 
   internal static void ConfigureCanvas(CanvasScaler scaler)
   {
@@ -106,23 +109,17 @@ internal static class DependencyDialogUi
     rect.offsetMax = Vector2.zero;
   }
 
-  internal static bool ApplyFonts(Transform root, params Text[] displayTexts)
+  internal static bool ApplyFonts(Transform root)
   {
     Text[] texts = root.GetComponentsInChildren<Text>(true);
-    Font fallback = Resources.GetBuiltinResource<Font>("Arial.ttf");
-    Font localized = TryGetLocalizedFont(out bool useLocalizedBody);
-    Font body = useLocalizedBody ? localized : fallback;
-    if (body == null) body = localized;
+    Font body = ReadableFont();
     if (body == null) return false;
     foreach (Text text in texts)
     {
       text.font = body;
-      text.lineSpacing = useLocalizedBody ? .9f : 1f;
+      text.lineSpacing = 1f;
     }
-    Font display = localized ?? body;
-    foreach (Text text in displayTexts)
-      if (text != null) text.font = display;
-    return localized != null;
+    return true;
   }
 
   internal static bool IsKorean()
@@ -139,19 +136,49 @@ internal static class DependencyDialogUi
     catch { return false; }
   }
 
-  private static Font TryGetLocalizedFont(out bool useLocalizedBody)
+  private static Font ReadableFont()
   {
-    useLocalizedBody = false;
+    if (_readableFont != null) return _readableFont;
+    string languageName = GetLanguageName();
+    string[] candidates = languageName.IndexOf("korean", StringComparison.OrdinalIgnoreCase) >= 0
+      ? new[] { "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "Arial" }
+      : languageName.IndexOf("japanese", StringComparison.OrdinalIgnoreCase) >= 0
+        ? new[] { "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", "Arial" }
+        : languageName.IndexOf("chinese", StringComparison.OrdinalIgnoreCase) >= 0
+          ? new[] { "PingFang SC", "PingFang TC", "Microsoft YaHei", "Noto Sans CJK SC", "Arial" }
+          : new[] { "Arial", "Helvetica", "Segoe UI" };
+    try
+    {
+      string[] installed = Font.GetOSInstalledFontNames();
+      string selected = candidates.FirstOrDefault(candidate =>
+        installed.Any(font => string.Equals(font, candidate, StringComparison.OrdinalIgnoreCase)));
+      if (!string.IsNullOrEmpty(selected))
+        _readableFont = Font.CreateDynamicFontFromOSFont(selected, 16);
+    }
+    catch { /* Fall through to bundled and localized fonts. */ }
+    _readableFont ??= Resources.GetBuiltinResource<Font>("Arial.ttf");
+    _readableFont ??= TryGetLocalizedFont();
+    return _readableFont;
+  }
+
+  private static string GetLanguageName()
+  {
     try
     {
       Type rd = Type.GetType("RDString, Assembly-CSharp");
       rd?.GetMethod("Setup", BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
       object language = rd?.GetField("language", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) ??
                         rd?.GetProperty("language", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-      string languageName = language?.ToString() ?? string.Empty;
-      useLocalizedBody = languageName.IndexOf("korean", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         languageName.IndexOf("japanese", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         languageName.IndexOf("chinese", StringComparison.OrdinalIgnoreCase) >= 0;
+      return language?.ToString() ?? string.Empty;
+    }
+    catch { return string.Empty; }
+  }
+
+  private static Font TryGetLocalizedFont()
+  {
+    try
+    {
+      Type rd = Type.GetType("RDString, Assembly-CSharp");
       object fontData = rd?.GetProperty("fontData", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) ??
                         rd?.GetField("fontData", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
       if (fontData == null) return null;
@@ -195,5 +222,105 @@ internal static class DependencyDialogUi
     _roundedSprite.name = "[AdofaiIpc] Rounded UI";
     _roundedSprite.hideFlags = HideFlags.HideAndDontSave;
     return _roundedSprite;
+  }
+}
+
+internal sealed class DependencyDialogModItem
+{
+  internal string Name;
+  internal string Requirement;
+  internal string Status;
+}
+
+internal sealed class DependencyDialogModList
+{
+  private readonly Transform _parent;
+  private readonly List<GameObject> _rows = new();
+
+  internal DependencyDialogModList(Transform parent) => _parent = parent;
+
+  internal void SetItems(IReadOnlyList<DependencyDialogModItem> items)
+  {
+    foreach (GameObject row in _rows) UnityEngine.Object.Destroy(row);
+    _rows.Clear();
+    int count = Math.Max(items.Count, 1);
+    float rowHeight = Math.Min(62f, 124f / count);
+    for (int index = 0; index < items.Count; index++)
+    {
+      DependencyDialogModItem item = items[index];
+      Image row = DependencyDialogUi.Image("Mod " + (index + 1), _parent, Color.clear);
+      DependencyDialogUi.Place(row.rectTransform, 14f, 7f + index * rowHeight, 592f, rowHeight);
+      _rows.Add(row.gameObject);
+
+      Text name = DependencyDialogUi.Text("Name", row.transform, 16, FontStyle.Bold,
+        TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
+      name.text = item.Name;
+      DependencyDialogUi.Place(name.rectTransform, 4f, 3f, 350f, 24f);
+      Text requirement = DependencyDialogUi.Text("Requirement", row.transform, 13, FontStyle.Bold,
+        TextAnchor.MiddleRight, DependencyDialogUi.Accent);
+      requirement.text = item.Requirement;
+      DependencyDialogUi.Place(requirement.rectTransform, 354f, 3f, 230f, 24f);
+      Text status = DependencyDialogUi.Text("Status", row.transform, 13, FontStyle.Normal,
+        TextAnchor.MiddleLeft, DependencyDialogUi.SecondaryText);
+      status.text = item.Status;
+      DependencyDialogUi.Place(status.rectTransform, 4f, 27f, 580f, 22f);
+      if (index + 1 < items.Count)
+      {
+        Image divider = DependencyDialogUi.Image("Divider", row.transform, new Color(.24f, .28f, .36f, .65f));
+        DependencyDialogUi.Place(divider.rectTransform, 4f, rowHeight - 1f, 580f, 1f);
+      }
+    }
+  }
+}
+
+internal sealed class DependencyDialogSteps
+{
+  private readonly Transform _parent;
+  private readonly List<GameObject> _items = new();
+
+  internal DependencyDialogSteps(Transform parent) => _parent = parent;
+
+  internal void Set(string title, IReadOnlyList<string> steps)
+  {
+    foreach (GameObject item in _items) UnityEngine.Object.Destroy(item);
+    _items.Clear();
+    Text heading = DependencyDialogUi.Text("Next step title", _parent, 12, FontStyle.Bold,
+      TextAnchor.MiddleLeft, DependencyDialogUi.Accent);
+    heading.text = title;
+    DependencyDialogUi.Place(heading.rectTransform, 20f, 8f, 570f, 20f);
+    _items.Add(heading.gameObject);
+
+    float availableWidth = 570f;
+    float itemWidth = availableWidth / Math.Max(steps.Count, 1);
+    for (int index = 0; index < steps.Count; index++)
+    {
+      float x = 20f + index * itemWidth;
+      Image badge = DependencyDialogUi.Image("Step " + (index + 1), _parent,
+        new Color(.36f, .62f, 1f, .2f), true);
+      DependencyDialogUi.Place(badge.rectTransform, x, 40f, 26f, 26f);
+      Text number = DependencyDialogUi.Text("Number", badge.transform, 14, FontStyle.Bold,
+        TextAnchor.MiddleCenter, DependencyDialogUi.Accent);
+      number.text = (index + 1).ToString();
+      DependencyDialogUi.Stretch(number.rectTransform);
+      _items.Add(badge.gameObject);
+
+      Text label = DependencyDialogUi.Text("Label", _parent, 14, FontStyle.Bold,
+        TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
+      label.text = steps[index];
+      DependencyDialogUi.Place(label.rectTransform, x + 36f, 37f, itemWidth - 42f, 32f);
+      label.resizeTextForBestFit = true;
+      label.resizeTextMinSize = 11;
+      label.resizeTextMaxSize = 14;
+      _items.Add(label.gameObject);
+
+      if (index + 1 < steps.Count)
+      {
+        Text arrow = DependencyDialogUi.Text("Arrow", _parent, 14, FontStyle.Bold,
+          TextAnchor.MiddleCenter, DependencyDialogUi.MutedText);
+        arrow.text = "›";
+        DependencyDialogUi.Place(arrow.rectTransform, x + itemWidth - 16f, 39f, 16f, 28f);
+        _items.Add(arrow.gameObject);
+      }
+    }
   }
 }
