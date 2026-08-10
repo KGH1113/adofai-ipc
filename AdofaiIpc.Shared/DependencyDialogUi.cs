@@ -109,6 +109,14 @@ internal static class DependencyDialogUi
     rect.sizeDelta = new Vector2(width, height);
   }
 
+  internal static void PlaceCentered(RectTransform rect, float x, float y, float width, float height)
+  {
+    rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+    rect.pivot = new Vector2(.5f, .5f);
+    rect.anchoredPosition = new Vector2(x, -y);
+    rect.sizeDelta = new Vector2(width, height);
+  }
+
   internal static void Stretch(RectTransform rect)
   {
     rect.anchorMin = Vector2.zero;
@@ -323,11 +331,12 @@ internal sealed class DependencyDialogSteps
 
       if (index + 1 < steps.Count)
       {
-        Text arrow = DependencyDialogUi.Text("Arrow", _parent, 20, FontStyle.Bold,
-          TextAnchor.MiddleCenter, DependencyDialogUi.SecondaryText);
-        arrow.text = "→";
-        DependencyDialogUi.Place(arrow.rectTransform, x + itemWidth - 34f, 36f, 28f, 32f);
-        _items.Add(arrow.gameObject);
+        float centerX = x + itemWidth - 20f;
+        Text chevron = DependencyDialogUi.Text("Chevron", _parent, 14, FontStyle.Bold,
+          TextAnchor.MiddleCenter, DependencyDialogUi.MutedText);
+        chevron.text = "›";
+        DependencyDialogUi.PlaceCentered(chevron.rectTransform, centerX, 53f, 18f, 28f);
+        _items.Add(chevron.gameObject);
       }
     }
   }
