@@ -82,6 +82,8 @@ internal static class DependencyDialogUi
     Text text = Text("Label", background.transform, 16, FontStyle.Bold, TextAnchor.MiddleCenter, PrimaryText);
     text.text = label;
     Stretch(text.rectTransform);
+    text.rectTransform.offsetMin = new Vector2(0f, 2f);
+    text.rectTransform.offsetMax = new Vector2(0f, 2f);
     return button;
   }
 
@@ -307,7 +309,7 @@ internal sealed class DependencyDialogSteps
       Text label = DependencyDialogUi.Text("Label", _parent, 14, FontStyle.Bold,
         TextAnchor.MiddleLeft, DependencyDialogUi.PrimaryText);
       label.text = steps[index];
-      DependencyDialogUi.Place(label.rectTransform, x + 36f, 37f, itemWidth - 42f, 32f);
+      DependencyDialogUi.Place(label.rectTransform, x + 36f, 37f, itemWidth - 76f, 32f);
       label.resizeTextForBestFit = true;
       label.resizeTextMinSize = 11;
       label.resizeTextMaxSize = 14;
@@ -315,10 +317,10 @@ internal sealed class DependencyDialogSteps
 
       if (index + 1 < steps.Count)
       {
-        Text arrow = DependencyDialogUi.Text("Arrow", _parent, 14, FontStyle.Bold,
-          TextAnchor.MiddleCenter, DependencyDialogUi.MutedText);
-        arrow.text = "›";
-        DependencyDialogUi.Place(arrow.rectTransform, x + itemWidth - 16f, 39f, 16f, 28f);
+        Text arrow = DependencyDialogUi.Text("Arrow", _parent, 20, FontStyle.Bold,
+          TextAnchor.MiddleCenter, DependencyDialogUi.SecondaryText);
+        arrow.text = "→";
+        DependencyDialogUi.Place(arrow.rectTransform, x + itemWidth - 34f, 36f, 28f, 32f);
         _items.Add(arrow.gameObject);
       }
     }
