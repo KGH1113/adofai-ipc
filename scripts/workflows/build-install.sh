@@ -14,6 +14,7 @@ run_task "Build launcher (Debug)" "$TASKS_DIR/build/launcher.sh" Debug
 run_task "Build bootstrap (Debug)" "$TASKS_DIR/build/bootstrap.sh" Debug
 run_task "Build dependency shim (Debug)" "$TASKS_DIR/build/dependency-shim.sh" Debug
 run_task "Build migration support (Debug)" "$TASKS_DIR/build/migration.sh" Debug
+run_task "Validate Unity runtime compatibility" "$TASKS_DIR/validate/runtime-compatibility.sh"
 run_task "Run C# tests" "$TASKS_DIR/test/csharp.sh"
 
 if [ "${ADOFAIIPC_SKIP_INSTALL:-0}" = "1" ]; then

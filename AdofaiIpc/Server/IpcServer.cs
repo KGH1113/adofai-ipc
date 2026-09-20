@@ -19,7 +19,7 @@ public sealed class IpcServer
   private bool _running;
 
   public int Port { get; private set; }
-  public string Url => Port > 0 ? $"http://127.0.0.1:{Port}/" : null;
+  public string Url => Port > 0 ? "http://127.0.0.1:" + Port + "/" : null;
 
   public void Start()
   {
@@ -70,7 +70,7 @@ public sealed class IpcServer
 
     for (int port = DefaultPort; port <= MaxPort; port++)
     {
-      string url = $"http://127.0.0.1:{port}/";
+      string url = "http://127.0.0.1:" + port + "/";
 
       try
       {
@@ -83,7 +83,7 @@ public sealed class IpcServer
         if (port != DefaultPort)
         {
           Main.Instance?.Warning(
-            $"Default IPC port {DefaultPort} was unavailable. Using fallback port {port}.");
+            "Default IPC port " + DefaultPort + " was unavailable. Using fallback port " + port + ".");
         }
 
         return;
@@ -100,7 +100,7 @@ public sealed class IpcServer
     }
 
     throw new InvalidOperationException(
-      $"Could not start AdofaiIpc server on ports {DefaultPort}-{MaxPort}.",
+      "Could not start AdofaiIpc server on ports " + DefaultPort + "-" + MaxPort + ".",
       lastError);
   }
 

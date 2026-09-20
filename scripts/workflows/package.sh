@@ -15,6 +15,7 @@ run_task "Build launcher (Release)" "$TASKS_DIR/build/launcher.sh" Release
 run_task "Build bootstrap (Release)" "$TASKS_DIR/build/bootstrap.sh" Release
 run_task "Build dependency shim (Release)" "$TASKS_DIR/build/dependency-shim.sh" Release
 run_task "Build migration support (Release)" "$TASKS_DIR/build/migration.sh" Release
+run_task "Validate Unity runtime compatibility" "$TASKS_DIR/validate/runtime-compatibility.sh"
 run_task "Run C# tests" "$TASKS_DIR/test/csharp.sh"
 run_task "Stage mod package" "$TASKS_DIR/package/stage.sh"
 run_task "Create mod archive" "$TASKS_DIR/package/archive.sh"

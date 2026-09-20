@@ -53,8 +53,8 @@ Mods/
     ├── AdofaiIpc.Shim.dll
     ├── AdofaiIpc.dll                 # 0.2.0 installer compatibility copy
     ├── Update/state.json
-    ├── Launcher/versions/0.4.0/AdofaiIpc.Launcher.dll
-    └── Runtime/versions/0.4.0/AdofaiIpc.dll
+    ├── Launcher/versions/0.4.1/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.4.1/AdofaiIpc.dll
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
