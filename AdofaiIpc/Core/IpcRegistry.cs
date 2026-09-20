@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AdofaiIpc;
 using AdofaiIpc.Unity;
 using Newtonsoft.Json;
 
@@ -11,6 +12,7 @@ public sealed class IpcRegistry
   private readonly object _sync = new object();
   private readonly Dictionary<string, RegisteredNamespace> _namespaces =
     new Dictionary<string, RegisteredNamespace>();
+  private readonly IpcDownloadTicketStore _downloadTickets = new IpcDownloadTicketStore();
 
   public AdofaiIpcNamespace RegisterNamespace(string name, IpcNamespaceInfo info)
   {
@@ -27,6 +29,7 @@ public sealed class IpcRegistry
 
       if (_namespaces.TryGetValue(name, out RegisteredNamespace registered))
       {
+        _downloadTickets.RevokeNamespace(name);
         registered.Info = info;
         registered.Status = IpcNamespaceStatus.Initializing;
         registered.Error = null;
@@ -50,7 +53,9 @@ public sealed class IpcRegistry
 
     lock (_sync)
     {
-      return _namespaces.Remove(name);
+      bool removed = _namespaces.Remove(name);
+      if (removed) _downloadTickets.RevokeNamespace(name);
+      return removed;
     }
   }
 
@@ -59,6 +64,25 @@ public sealed class IpcRegistry
     string method,
     Func<IpcRequest, object> handler,
     bool requiresMainThread)
+  {
+    RegisterMethod(namespaceName, method, handler, requiresMainThread, false);
+  }
+
+  internal void RegisterDownloadMethod(
+    string namespaceName,
+    string method,
+    Func<IpcRequest, object> handler,
+    bool requiresMainThread)
+  {
+    RegisterMethod(namespaceName, method, handler, requiresMainThread, true);
+  }
+
+  private void RegisterMethod(
+    string namespaceName,
+    string method,
+    Func<IpcRequest, object> handler,
+    bool requiresMainThread,
+    bool isDownload)
   {
     if (!IpcNameValidator.IsValidMethod(method))
     {
@@ -72,7 +96,7 @@ public sealed class IpcRegistry
         throw new InvalidOperationException("IPC namespace is not registered: " + namespaceName);
       }
 
-      registered.Methods[method] = new IpcHandler(handler, requiresMainThread);
+      registered.Methods[method] = new IpcHandler(handler, requiresMainThread, isDownload);
     }
   }
 
@@ -212,7 +236,28 @@ public sealed class IpcRegistry
         ? MainThreadInvoker.Invoke(() => handler.Invoke(request))
         : handler.Invoke(request);
 
-      return IpcResponse.Success(request.Id, result);
+      if (handler.IsDownload)
+      {
+        if (result is IpcDownloadError downloadError)
+        {
+          return IpcResponse.Fail(
+            request.Id,
+            downloadError.Code,
+            downloadError.Message,
+            downloadError.StatusCode);
+        }
+
+        if (!(result is IpcDownloadSource))
+        {
+          return IpcResponse.Fail(
+            request.Id,
+            IpcErrorCodes.DownloadInvalidResult,
+            "Download handler must return IpcDownloadSource or IpcDownloadError.",
+            500);
+        }
+      }
+
+      return IpcResponse.Success(request.Id, result, handler.IsDownload);
     }
     catch (TimeoutException e)
     {
@@ -278,6 +323,68 @@ public sealed class IpcRegistry
 
       return registered.Info;
     }
+  }
+
+  internal bool TryCreateDownloadTicket(
+    string namespaceName,
+    IpcDownloadSource source,
+    out string token,
+    out string errorCode,
+    out string errorMessage)
+  {
+    token = null;
+    errorCode = null;
+    errorMessage = null;
+
+    lock (_sync)
+    {
+      if (!_namespaces.TryGetValue(namespaceName, out RegisteredNamespace registered))
+      {
+        errorCode = IpcErrorCodes.NamespaceNotFound;
+        errorMessage = "Namespace not found: " + namespaceName;
+        return false;
+      }
+
+      if (registered.Status != IpcNamespaceStatus.Ready)
+      {
+        errorCode = registered.Status == IpcNamespaceStatus.Initializing
+          ? IpcErrorCodes.NamespaceInitializing
+          : IpcErrorCodes.NamespaceError;
+        errorMessage = "Namespace is not ready: " + namespaceName;
+        return false;
+      }
+
+      return _downloadTickets.TryCreate(
+        namespaceName,
+        source,
+        registered.Info.AllowedOrigins,
+        out token,
+        out errorCode,
+        out errorMessage);
+    }
+  }
+
+  internal bool TryTakeDownloadTicket(
+    string token,
+    string origin,
+    out IpcDownloadSource source,
+    out string errorCode,
+    out string errorMessage)
+  {
+    lock (_sync)
+    {
+      return _downloadTickets.TryTake(
+        token,
+        origin,
+        out source,
+        out errorCode,
+        out errorMessage);
+    }
+  }
+
+  internal void ClearDownloadTickets()
+  {
+    _downloadTickets.Clear();
   }
 
   private void SetNamespaceStatus(

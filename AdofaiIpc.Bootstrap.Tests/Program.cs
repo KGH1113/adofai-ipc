@@ -105,7 +105,7 @@ internal static class Program
     BootstrapStateStore.Write(directory.Path, State("0.2.0"));
     string candidate = typeof(Bootstrap).Assembly.Location;
     string version = DependencyShim.StageCandidate(directory.Path, candidate);
-    Assert(version == "0.3.0", "Bootstrap ProductVersion was not preserved by the shim.");
+    Assert(version == "0.4.0", "Bootstrap ProductVersion was not preserved by the shim.");
     Assert(BootstrapStateStore.Read(directory.Path).Trial == version, "Trial was not recorded.");
     DependencyShim.DiscardTrial(directory.Path, version);
     Assert(BootstrapStateStore.Read(directory.Path).Trial == null, "Trial was not discarded.");
@@ -120,7 +120,7 @@ internal static class Program
       File.ReadAllText(Path.Combine(directory.Path, "Info.json")));
     UnityModManager.ModEntry owner = new(info, directory.Path + Path.DirectorySeparatorChar);
     string version = DependencyShim.Seed(owner, typeof(Bootstrap).Assembly.Location);
-    Assert(version == "0.3.0", "Seed did not preserve the bootstrap product version.");
+    Assert(version == "0.4.0", "Seed did not preserve the bootstrap product version.");
     Assert(File.Exists(Path.Combine(directory.Path, "AdofaiIpc.DependencyShim.dll")), "Seed did not install the fixed shim.");
     Assert(File.Exists(Path.Combine(directory.Path, "DependencyBootstrap", "versions", version,
       "AdofaiIpc.Bootstrap.dll")), "Seed did not install the bootstrap candidate.");
@@ -169,7 +169,7 @@ internal static class Program
   {
     string root = AppContext.BaseDirectory;
     string version = ReadJsonVersion(Path.Combine(root, "Current", "Info.json"), "Version");
-    Assert(version == "0.3.0", "Unexpected canonical product version.");
+    Assert(version == "0.4.0", "Unexpected canonical product version.");
     Assert(ReadJsonVersion(Path.Combine(root, "Current", "client-package.json"), "version") == version,
       "npm package is not lockstep with Info.json.");
     Assert(FileVersionInfo.GetVersionInfo(typeof(Bootstrap).Assembly.Location).ProductVersion == version,

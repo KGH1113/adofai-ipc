@@ -435,8 +435,10 @@ test("stable and prerelease mismatches report their direction", async (t) => {
   const cases = [
     ["0.2.0", "server_outdated"],
     ["0.3.0-beta.1", "server_outdated"],
-    ["0.3.1", "client_outdated"],
-    ["0.4.0-beta.1", "client_outdated"]
+    ["0.3.1", "server_outdated"],
+    ["0.4.0-beta.1", "server_outdated"],
+    ["0.4.1", "client_outdated"],
+    ["0.5.0-beta.1", "client_outdated"]
   ];
 
   for (const [serverVersion, direction] of cases) {

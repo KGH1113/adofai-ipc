@@ -15,6 +15,11 @@ public sealed class IpcHttpHandler
 
     if (method == "OPTIONS") return ServerResponse.NoContent();
 
+    if (method == "GET" && path.StartsWith("/ipc/download/", StringComparison.Ordinal))
+    {
+      return HandleDownload(context, path);
+    }
+
     if (method == "GET" && path == "/ipc/health")
     {
       return ServerResponse.Ok(new
@@ -58,6 +63,43 @@ public sealed class IpcHttpHandler
       IpcResponse.Fail(null, IpcErrorCodes.InvalidRequest, "Endpoint not found."));
   }
 
+  public bool IsDownloadRequest(HttpListenerContext context)
+  {
+    return
+      string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase) &&
+      NormalizePath(context.Request.Url?.AbsolutePath)
+        .StartsWith("/ipc/download/", StringComparison.Ordinal);
+  }
+
+  private static ServerResponse HandleDownload(HttpListenerContext context, string path)
+  {
+    string token = path.Substring("/ipc/download/".Length);
+    try
+    {
+      token = Uri.UnescapeDataString(token);
+    }
+    catch (UriFormatException)
+    {
+      return ServerResponse.NoCors(
+        404,
+        IpcResponse.Fail(null, IpcErrorCodes.DownloadNotFound, "Download ticket not found or expired."));
+    }
+
+    if (!AdofaiIpc.Registry.TryTakeDownloadTicket(
+      token,
+      context.Request.Headers["Origin"],
+      out IpcDownloadSource source,
+      out string errorCode,
+      out string errorMessage))
+    {
+      return ServerResponse.NoCors(
+        GetStatusCode(errorCode),
+        IpcResponse.Fail(null, errorCode, errorMessage));
+    }
+
+    return ServerResponse.Download(source);
+  }
+
   private static ServerResponse HandleIpcCall(HttpListenerContext context)
   {
     IpcRequest request;
@@ -91,9 +133,56 @@ public sealed class IpcHttpHandler
 
     IpcResponse response = AdofaiIpc.Registry.Invoke(request);
 
+    if (response.Ok && response.IsDownload && response.Result is IpcDownloadSource source)
+    {
+      string baseUrl = Main.Server?.Url;
+      if (string.IsNullOrEmpty(baseUrl))
+      {
+        source.Dispose();
+        return ServerResponse.InternalServerError(
+          IpcResponse.Fail(
+            request.Id,
+            IpcErrorCodes.InternalError,
+            "The IPC server is not running."));
+      }
+
+      if (!AdofaiIpc.Registry.TryCreateDownloadTicket(
+        request.Namespace,
+        source,
+        out string token,
+        out string errorCode,
+        out string errorMessage))
+      {
+        source.Dispose();
+        return new ServerResponse(
+          GetStatusCode(errorCode),
+          IpcResponse.Fail(request.Id, errorCode, errorMessage));
+      }
+
+      return ServerResponse.Ok(IpcResponse.Success(request.Id, new
+      {
+        Url = baseUrl.TrimEnd('/') + "/ipc/download/" + token,
+        ByteLength = source.ByteLength
+      }));
+    }
+
     if (response.Ok) return ServerResponse.Ok(response);
 
-    int status = response.Error?.Code switch
+    int status = GetStatusCode(response);
+
+    return new ServerResponse(status, response);
+  }
+
+  private static int GetStatusCode(IpcResponse response)
+  {
+    if (response == null) return 500;
+    if (response.StatusCode >= 400 && response.StatusCode <= 599) return response.StatusCode;
+    return GetStatusCode(response.Error?.Code);
+  }
+
+  private static int GetStatusCode(string errorCode)
+  {
+    return errorCode switch
     {
       IpcErrorCodes.InvalidRequest => 400,
       IpcErrorCodes.InvalidNamespace => 400,
@@ -102,11 +191,13 @@ public sealed class IpcHttpHandler
       IpcErrorCodes.NamespaceInitializing => 503,
       IpcErrorCodes.NamespaceError => 503,
       IpcErrorCodes.HandlerNotFound => 404,
+      IpcErrorCodes.DownloadNotFound => 404,
+      IpcErrorCodes.OriginNotAllowed => 403,
+      IpcErrorCodes.DownloadTicketLimit => 503,
       IpcErrorCodes.HandlerFailed => 500,
+      IpcErrorCodes.DownloadInvalidResult => 500,
       _ => 500
     };
-
-    return new ServerResponse(status, response);
   }
 
   private static string NormalizePath(string path)

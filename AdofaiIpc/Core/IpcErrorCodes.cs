@@ -10,6 +10,9 @@ public static class IpcErrorCodes
   public const string NamespaceError = "namespace_error";
   public const string HandlerNotFound = "handler_not_found";
   public const string HandlerFailed = "handler_failed";
+  public const string DownloadInvalidResult = "download_invalid_result";
+  public const string DownloadTicketLimit = "download_ticket_limit";
+  public const string DownloadNotFound = "download_not_found";
   public const string InternalError = "internal_error";
   public const string OriginNotAllowed = "origin_not_allowed";
 }

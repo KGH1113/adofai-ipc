@@ -28,6 +28,16 @@ public sealed class AdofaiIpcNamespace
     _registry.RegisterMethod(Name, method, handler, true);
   }
 
+  public void RegisterDownload(string method, Func<IpcRequest, object> handler)
+  {
+    _registry.RegisterDownloadMethod(Name, method, handler, false);
+  }
+
+  public void RegisterDownloadMainThread(string method, Func<IpcRequest, object> handler)
+  {
+    _registry.RegisterDownloadMethod(Name, method, handler, true);
+  }
+
   public void MarkInitializing()
   {
     _registry.SetNamespaceInitializing(Name);

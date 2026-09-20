@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Threading;
+using AdofaiIpc.Core;
 
 namespace AdofaiIpc.Server;
 
@@ -8,9 +9,12 @@ public sealed class IpcServer
 {
   private const int DefaultPort = 32145;
   private const int MaxPort = 32155;
+  private const int MaxConcurrentDownloads = 4;
 
   private readonly HttpListener _listener = new HttpListener();
   private readonly IpcHttpHandler _handler = new IpcHttpHandler();
+  private readonly SemaphoreSlim _downloadSlots =
+    new SemaphoreSlim(MaxConcurrentDownloads, MaxConcurrentDownloads);
   private Thread _thread;
   private bool _running;
 
@@ -37,6 +41,7 @@ public sealed class IpcServer
   public void Stop()
   {
     _running = false;
+    global::AdofaiIpc.AdofaiIpc.Registry.ClearDownloadTickets();
 
     try
     {
@@ -106,7 +111,22 @@ public sealed class IpcServer
       try
       {
         HttpListenerContext context = _listener.GetContext();
-        Handle(context);
+        if (_handler.IsDownloadRequest(context))
+        {
+          if (!_downloadSlots.Wait(0))
+          {
+            WriteDownloadBusy(context);
+          }
+          else if (!ThreadPool.QueueUserWorkItem(_ => HandleDownload(context)))
+          {
+            _downloadSlots.Release();
+            WriteDownloadBusy(context);
+          }
+        }
+        else
+        {
+          Handle(context);
+        }
       }
       catch (HttpListenerException)
       {
@@ -133,6 +153,38 @@ public sealed class IpcServer
     catch (Exception e)
     {
       IpcResponseWriter.WriteError(context, e);
+    }
+  }
+
+  private static void WriteDownloadBusy(HttpListenerContext context)
+  {
+    try
+    {
+      IpcResponseWriter.Write(
+        context,
+        ServerResponse.NoCors(
+          503,
+          IpcResponse.Fail(
+            null,
+            IpcErrorCodes.DownloadTicketLimit,
+            "Too many active downloads. Try again shortly.")));
+    }
+    catch (Exception e)
+    {
+      Main.Instance?.LogException(e);
+      try { context.Response.OutputStream.Close(); } catch { }
+    }
+  }
+
+  private void HandleDownload(HttpListenerContext context)
+  {
+    try
+    {
+      Handle(context);
+    }
+    finally
+    {
+      _downloadSlots.Release();
     }
   }
 }

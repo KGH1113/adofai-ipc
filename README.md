@@ -34,6 +34,7 @@ listener를 소유하고 다른 모드들은 자신의 namespace와 method만 �
 - namespace/method discovery endpoint 제공
 - namespace별 `initializing` / `ready` / `error` 상태와 호출 gating 제공
 - Unity main thread가 필요한 handler를 위한 `RegisterMainThread` 지원
+- 큰 파일을 메모리에 모으지 않고 내려받는 1회용 다운로드 티켓 지원
 - 모드 lifecycle에 맞춘 register/unregister 흐름 지원
 - 의존 모드에서 AdofaiIpc를 자동 설치하고 오류를 한 화면에 안내하는 공용 Bootstrap 제공
 
@@ -52,8 +53,8 @@ Mods/
     ├── AdofaiIpc.Shim.dll
     ├── AdofaiIpc.dll                 # 0.2.0 installer compatibility copy
     ├── Update/state.json
-    ├── Launcher/versions/0.3.0/AdofaiIpc.Launcher.dll
-    └── Runtime/versions/0.3.0/AdofaiIpc.dll
+    ├── Launcher/versions/0.4.0/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.4.0/AdofaiIpc.dll
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
@@ -71,6 +72,9 @@ Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases�
 
 1. [한국어 개발 가이드](docs/kor/000-DevelopGuide.md)
 2. [English Developer Guide](docs/en/000-DevelopGuide.md)
+
+파일 스트리밍 API는 [한국어 다운로드 가이드](docs/kor/007-Downloads.md)와
+[English download guide](docs/en/007-Downloads.md)를 참고하세요.
 
 ## Runtime
 

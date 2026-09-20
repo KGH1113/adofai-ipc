@@ -1,6 +1,6 @@
 {
   "name": "@adofai-ipc/client",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TypeScript client for the AdofaiIpc local HTTP IPC gateway.",
   "type": "module",
   "license": "MIT",
