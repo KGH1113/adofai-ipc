@@ -14,6 +14,7 @@ internal static class Program
   static async Task Main(string[] args)
   {
     TestDiscardedDispatcherQueue();
+    TestDisconnectedEventDelivery();
     var queue = new ConcurrentQueue<Action>();
     var registry = new IpcRegistry(action => queue.Enqueue(action));
     var ns = registry.RegisterNamespace("test-mod", new IpcNamespaceInfo { Version = "1.0.0", AllowedOrigins = new[] { "https://allowed.example" } });
@@ -95,6 +96,43 @@ internal static class Program
     finally { server.Stop(); }
   }
 
+  static void CheckInvalidOperation(Action action, string detail)
+  {
+    bool thrown = false;
+    try { action(); } catch (InvalidOperationException) { thrown = true; }
+    Check(thrown, detail);
+  }
+
+  static void TestDisconnectedEventDelivery()
+  {
+    var registry = new IpcRegistry(action => action());
+    var peer = new FakePeer(); peer.Info.Origin = "https://allowed.example";
+    registry.Attach(peer);
+    var ns = registry.RegisterNamespace("snapshot-mod", new IpcNamespaceInfo { AllowedOrigins = new[] { "https://allowed.example" } });
+    ns.MarkReady();
+    registry.Receive(peer, IpcPeerMessage.Create("subscribe", "snapshot-mod", "namespace.subscribe", null));
+    int before = peer.Sent;
+    ns.SendToPeer(peer.Info.PeerId, "state.snapshot", new { value = 1 });
+    Check(peer.Sent == before + 1, "authorized event delivery");
+    registry.Receive(peer, IpcPeerMessage.Create("unsubscribe", "snapshot-mod", "namespace.unsubscribe", null));
+    before = peer.Sent;
+    ns.SendToPeer(peer.Info.PeerId, "state.snapshot", new { value = 2 });
+    Check(peer.Sent == before, "deferred snapshot after unsubscribe was delivered");
+    CheckInvalidOperation(() => ns.SendCommandToPeer(peer.Info.PeerId, "work.begin", new { }), "unsubscribed reverse command silently accepted");
+    registry.Receive(peer, IpcPeerMessage.Create("subscribe", "snapshot-mod", "namespace.subscribe", null));
+    peer.Info.Origin = "https://forbidden.example";
+    CheckInvalidOperation(() => ns.SendToPeer(peer.Info.PeerId, "state.snapshot", new { }), "unauthorized event silently accepted");
+    peer.Info.Origin = "https://allowed.example";
+    registry.Detach(peer);
+    before = peer.Sent;
+    ns.SendToPeer(peer.Info.PeerId, "state.snapshot", new { value = 3 });
+    Check(peer.Sent == before, "deferred snapshot after detach was delivered");
+    CheckInvalidOperation(() => ns.SendCommandToPeer(peer.Info.PeerId, "work.begin", new { }), "disconnected reverse command silently accepted");
+    registry.UnregisterNamespace("snapshot-mod");
+    CheckInvalidOperation(() => ns.SendToPeer(peer.Info.PeerId, "state.snapshot", new { }), "invalid namespace handle silently accepted");
+    Console.WriteLine("PASS disconnected events are dropped; reverse commands, origin and stale handles remain strict");
+  }
+
   static void TestDiscardedDispatcherQueue()
   {
     var queued = new ConcurrentQueue<Action>();
@@ -132,8 +170,8 @@ internal static class Program
   {
     public IpcPeerInfo Info { get; } = new() { PeerId = "test-peer", ConnectionId = "test-connection" };
     public CancellationToken CancellationToken => CancellationToken.None;
-    public int Accepted, Busy;
-    public void Send(IpcPeerMessage message) { if (message.Kind == "accepted") Accepted++; if ((string)message.Payload?["code"] == "busy") Busy++; }
+    public int Accepted, Busy, Sent;
+    public void Send(IpcPeerMessage message) { Sent++; if (message.Kind == "accepted") Accepted++; if ((string)message.Payload?["code"] == "busy") Busy++; }
     public void Close() { }
   }
 

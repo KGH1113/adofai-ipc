@@ -110,6 +110,12 @@ public sealed class Main
     }
   }
 
+  internal void ShutdownForApplicationExit()
+  {
+    try { Disable(); }
+    catch (Exception error) { LogException(error); }
+  }
+
   private void Enable()
   {
     if (_enabled) return;

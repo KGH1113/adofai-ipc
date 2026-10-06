@@ -46,7 +46,9 @@ token을 취소합니다. 작업·lease·권한 token을 peer에 묶는 정책�
 
 Publish는 허용된 구독자에게 이벤트를 보냅니다. SendToPeer는 구독한 특정 peer에 이벤트를 보내며
 correlationId를 지정할 수 있습니다. SendCommandToPeer는 역방향 명령 ID를 반환합니다.
-그 결과는 PeerEvent의 CorrelationId로 연결합니다. PeerSubscribed에서 초기 snapshot을 보내고
+그 결과는 PeerEvent의 CorrelationId로 연결합니다. 연결 종료·구독 해제 후 도착한 이벤트는
+그 peer에게 보내지 않고 건너뜁니다. 역방향 명령은 수신 peer가 없으면 실패합니다.
+유효하지 않은 handle, Origin 거부와 직렬화 오류는 숨기지 않습니다. PeerSubscribed에서 초기 snapshot을 보내고
 PeerDisconnected에서 소유 자원을 정리합니다. 구독 snapshot 콜백은 ready일 때 실행됩니다.
 
 namespace는 소문자·숫자·하이픈, command/event는 여기에 점도 사용합니다. AllowedOrigins는 구독과

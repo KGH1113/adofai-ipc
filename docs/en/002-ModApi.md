@@ -49,7 +49,9 @@ bind jobs, leases or privileged tokens to the peer in your application layer.
 `Publish(name,payload)` sends an event to all authorized subscribers. `SendToPeer(peerId,name,
 payload,correlationId)` sends an event to one subscribed peer. `SendCommandToPeer(peerId,name,
 payload)` initiates a reverse command and returns its ID. Consume its named replies through
-`PeerEvent`; correlate with CorrelationId. Subscribe to `PeerSubscribed` for hydration and
+`PeerEvent`; correlate with CorrelationId. Events queued before disconnect or unsubscribe are safely dropped
+for that departed peer; reverse commands still fail when their recipient is absent. Invalid handles,
+Origin violations and serialization failures are not hidden. Subscribe to `PeerSubscribed` for hydration and
 `PeerDisconnected` for owner cleanup. Snapshot callbacks fire when the namespace is ready.
 
 Namespace names use lowercase letters, digits and hyphens. Command/event names also allow dots.

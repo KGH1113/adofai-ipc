@@ -214,7 +214,12 @@ public sealed class IpcRegistry
     lock (_sync)
     {
       RequireCurrent(handle);
-      if (!_peers.TryGetValue(peerId, out peer) || !peer.Subscriptions.Contains(handle.Name)) throw new InvalidOperationException("The peer is disconnected or not subscribed.");
+      if (!_peers.TryGetValue(peerId, out peer) || !peer.Subscriptions.Contains(handle.Name))
+      {
+        // Deferred hydration can outlive a normal disconnect or unsubscribe.
+        if (kind == "event") return null;
+        throw new InvalidOperationException("The peer is disconnected or not subscribed.");
+      }
     }
     if (!IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) throw new InvalidOperationException("The peer cannot access this namespace.");
     var message = IpcPeerMessage.Create(kind, handle.Name, name, payload, correlationId); peer.Transport.Send(message); return message.Id;

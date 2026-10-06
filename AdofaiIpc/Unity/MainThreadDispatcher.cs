@@ -55,6 +55,11 @@ internal sealed class MainThreadDispatcher : MonoBehaviour
     _mainThreadId = 0;
   }
 
+  private void OnApplicationQuit()
+  {
+    Main.Instance?.ShutdownForApplicationExit();
+  }
+
   private void Update()
   {
     for (int i = 0; i < MaxActionsPerFrame && Pending.TryDequeue(out Action action); i++)
