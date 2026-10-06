@@ -26,3 +26,9 @@ Keep operation ownership distinct from connection heartbeat. For example, a rend
 need its own lease, virtual clock, input gate and frame acknowledgment. Allow only one frame in
 flight if file consumption must finish before the next frame is produced. Close/dispose must
 restore any gate and release owned files/resources even when the UI process has already exited.
+
+Unsubscribing also cancels commands admitted through that subscription. A cancelled command
+that has not started immediately returns its admission slot and cannot run through a later
+dispatcher callback. A running handler must observe CancellationToken and retains its slot
+until execution ends. Stopping IPC closes both socket and local peers and cancels their work
+before shutting down the game-thread dispatcher. Recreate local peers when IPC starts again.

@@ -55,3 +55,8 @@ namespace는 소문자·숫자·하이픈, command/event는 여기에 점도 사
 같은 프로세스의 모드는 CreateLocalPeer(name)을 자체 port로 감싸 주입할 수 있습니다.
 Message listener를 먼저 등록한 뒤 Subscribe, SendCommand, SendEvent를 사용하고 Dispose합니다.
 동일한 router를 사용하므로 소켓이나 HTTP polling이 필요하지 않습니다.
+
+Local peer의 IsClosed는 IPC 중지나 peer 종료 후 true입니다. 중지된 peer를 재사용하지 말고
+연결 adapter에서 새 peer와 listener·구독을 만드세요. 종료된 peer에 메시지를 보내면
+ObjectDisposedException이 발생합니다. Dispose는 구독을 unavailable로 알리고 소유 자원을
+정리하므로 이전 세션의 이벤트가 새 세션에 영향을 주지 않도록 session identity를 확인하세요.

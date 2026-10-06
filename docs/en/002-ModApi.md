@@ -59,3 +59,8 @@ Same-process mods can use `AdofaiIpc.AdofaiIpc.CreateLocalPeer(name)`: install t
 Subscribe(namespace), SendCommand or SendEvent, then Dispose. This uses the shared router and
 the same command/state contract without another socket or HTTP polling. Wrap it in an application
 port rather than making domain services reference the concrete local peer.
+
+A local peer exposes `IsClosed`. Once IPC stops or that peer closes, create a fresh peer,
+listeners and subscriptions in the connection adapter. Sending through a closed peer throws
+`ObjectDisposedException`. Dispose invalidates subscriptions with unavailable and releases peer
+ownership; use session identity to prevent callbacks from an old peer affecting its replacement.

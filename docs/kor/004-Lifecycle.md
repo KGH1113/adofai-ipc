@@ -24,3 +24,9 @@ wire mismatch는 재시도를 멈춥니다. 최초 서버 부재는 UNAVAILABLE�
 렌더링 같은 작업의 lease, virtual clock, input gate, frame ACK는 전송 heartbeat와 별도로
 유지합니다. 파일 소비가 끝나야 다음 frame을 만들 수 있다면 in-flight1을 지키세요.
 UI 프로세스가 이미 종료돼도 close/dispose에서 gate와 파일·자원을 정리해야 합니다.
+
+구독 해제도 해당 구독에서 받은 명령 token을 취소합니다. 아직 실행되지 않은 명령은
+취소 시 admission 공간을 즉시 반환하고 나중에 dispatcher가 호출해도 실행하지 않습니다.
+이미 실행 중인 handler는 CancellationToken을 관찰해야 하며 실제 종료까지 공간을 유지합니다.
+IPC 자체가 중지되면 외부 소켓과 local peer를 모두 종료하고 먼저 명령을 취소한 뒤
+게임 스레드 dispatcher를 종료합니다. 다시 켜진 IPC에는 새 local peer를 연결하세요.
