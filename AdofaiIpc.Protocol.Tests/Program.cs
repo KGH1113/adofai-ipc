@@ -13,6 +13,7 @@ internal static class Program
   static void Check(bool condition, string detail) { if (!condition) throw new Exception(detail); }
   static async Task Main(string[] args)
   {
+    TestDiscardedDispatcherQueue();
     var queue = new ConcurrentQueue<Action>();
     var registry = new IpcRegistry(action => queue.Enqueue(action));
     var ns = registry.RegisterNamespace("test-mod", new IpcNamespaceInfo { Version = "1.0.0", AllowedOrigins = new[] { "https://allowed.example" } });
@@ -87,6 +88,48 @@ internal static class Program
       Console.WriteLine("PASS: real WebSocket lifecycle, commands/events, dedup, origins, streamed tickets, unload cancellation, local peer.");
     }
     finally { server.Stop(); }
+  }
+
+  static void TestDiscardedDispatcherQueue()
+  {
+    var queued = new ConcurrentQueue<Action>();
+    var registry = new IpcRegistry(queued.Enqueue);
+    var peer = new FakePeer(); registry.Attach(peer);
+    var ns = registry.RegisterNamespace("queue-mod", new IpcNamespaceInfo());
+    ns.RegisterMainThreadCommand("work", _ => throw new Exception("Cancelled queued work executed")); ns.MarkReady();
+    registry.Receive(peer, IpcPeerMessage.Create("subscribe", "queue-mod", "namespace.subscribe", null));
+    for (int i = 0; i < 256; i++) registry.Receive(peer, IpcPeerMessage.Create("command", "queue-mod", "work", new { }, id: "before-" + i));
+    Check(peer.Accepted == 256, "initial command capacity");
+    registry.UnregisterNamespace("queue-mod"); queued.Clear();
+    ns = registry.RegisterNamespace("queue-mod", new IpcNamespaceInfo()); ns.RegisterMainThreadCommand("work", _ => { }); ns.MarkReady();
+    for (int i = 0; i < 256; i++) registry.Receive(peer, IpcPeerMessage.Create("command", "queue-mod", "work", new { }, id: "after-" + i));
+    Check(peer.Accepted == 512 && peer.Busy == 0, "discarded dispatcher actions leaked command admission slots");
+    registry.Suspend(); queued.Clear(); registry.Resume();
+    registry.Attach(peer);
+    registry.Receive(peer, IpcPeerMessage.Create("subscribe", "queue-mod", "namespace.subscribe", null));
+    for (int i = 0; i < 256; i++) registry.Receive(peer, IpcPeerMessage.Create("command", "queue-mod", "work", new { }, id: "after-stop-" + i));
+    Check(peer.Accepted == 768 && peer.Busy == 0, "router stop must cancel discarded work without unregistering namespaces");
+    registry.Receive(peer, IpcPeerMessage.Create("unsubscribe", "queue-mod", "namespace.unsubscribe", null)); queued.Clear();
+    registry.Receive(peer, IpcPeerMessage.Create("subscribe", "queue-mod", "namespace.subscribe", null));
+    for (int i = 0; i < 256; i++) registry.Receive(peer, IpcPeerMessage.Create("command", "queue-mod", "work", new { }, id: "after-unsubscribe-" + i));
+    Check(peer.Accepted == 1024 && peer.Busy == 0, "unsubscribe did not cancel queued work or restore command capacity");
+    registry.Suspend(); queued.Clear(); registry.Resume();
+    using var local = new IpcLocalPeer(registry, "stop-test"); local.Subscribe("queue-mod");
+    bool unavailable = false; local.Message += msg => { if (msg.Name == "namespace.changed" && (string)msg.Payload["status"] == "unavailable") unavailable = true; };
+    registry.Suspend();
+    Check(local.IsClosed && unavailable, "router stop must close and invalidate local peers");
+    bool rejected = false; try { local.SendCommand("queue-mod", "work", new { }); } catch (ObjectDisposedException) { rejected = true; }
+    Check(rejected, "closed local peer silently accepted a command");
+    registry.UnregisterNamespace("queue-mod");
+    Console.WriteLine("PASS cancelled/discarded game-thread queue releases all admission slots");
+  }
+  sealed class FakePeer : IIpcPeer
+  {
+    public IpcPeerInfo Info { get; } = new() { PeerId = "test-peer", ConnectionId = "test-connection" };
+    public CancellationToken CancellationToken => CancellationToken.None;
+    public int Accepted, Busy;
+    public void Send(IpcPeerMessage message) { if (message.Kind == "accepted") Accepted++; if ((string)message.Payload?["code"] == "busy") Busy++; }
+    public void Close() { }
   }
 
   sealed class Socket : IDisposable

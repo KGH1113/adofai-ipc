@@ -13,6 +13,9 @@ public sealed class IpcLocalPeer : IDisposable, IIpcPeer
   private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
   private readonly ConcurrentQueue<IpcPeerMessage> _messages = new ConcurrentQueue<IpcPeerMessage>();
   private int _draining, _queued;
+  private readonly object _subscriptionsSync = new object();
+  private readonly System.Collections.Generic.HashSet<string> _subscriptions = new System.Collections.Generic.HashSet<string>();
+  public bool IsClosed => _lifetime.IsCancellationRequested;
   public IpcPeerInfo Info { get; }
   CancellationToken IIpcPeer.CancellationToken => _lifetime.Token;
   public event Action<IpcPeerMessage> Message;
@@ -20,13 +23,17 @@ public sealed class IpcLocalPeer : IDisposable, IIpcPeer
   {
     _registry = registry;
     Info = new IpcPeerInfo { PeerId = name + "-" + Guid.NewGuid().ToString("N"), ConnectionId = Guid.NewGuid().ToString("N") };
-    if (!registry.Attach(this)) throw new InvalidOperationException("Too many IPC peers.");
+    if (!registry.Attach(this)) throw new InvalidOperationException("IPC routing is stopped or its peer limit has been reached.");
   }
-  public void Subscribe(string ns) => _registry.Receive(this, IpcPeerMessage.Create("subscribe", ns, null, null));
+  public void Subscribe(string ns)
+  {
+    ThrowIfClosed(); lock (_subscriptionsSync) _subscriptions.Add(ns);
+    _registry.Receive(this, IpcPeerMessage.Create("subscribe", ns, null, null));
+  }
   public string SendCommand(string ns, string name, object payload)
-  { var message = IpcPeerMessage.Create("command", ns, name, payload); _registry.Receive(this, message); return message.Id; }
+  { ThrowIfClosed(); var message = IpcPeerMessage.Create("command", ns, name, payload); _registry.Receive(this, message); return message.Id; }
   public void SendEvent(string ns, string name, object payload, string correlationId = null)
-    => _registry.Receive(this, IpcPeerMessage.Create("event", ns, name, payload, correlationId));
+  { ThrowIfClosed(); _registry.Receive(this, IpcPeerMessage.Create("event", ns, name, payload, correlationId)); }
   void IIpcPeer.Send(IpcPeerMessage message)
   {
     if (_lifetime.IsCancellationRequested) return;
@@ -43,5 +50,17 @@ public sealed class IpcLocalPeer : IDisposable, IIpcPeer
     });
   }
   void IIpcPeer.Close() => Dispose();
-  public void Dispose() { if (_lifetime.IsCancellationRequested) return; _lifetime.Cancel(); _registry.Detach(this); while (_messages.TryDequeue(out _)) { } }
+  private void ThrowIfClosed() { if (IsClosed) throw new ObjectDisposedException(nameof(IpcLocalPeer)); }
+  public void Dispose()
+  {
+    if (_lifetime.IsCancellationRequested) return;
+    _lifetime.Cancel(); _registry.Detach(this);
+    string[] subscriptions; lock (_subscriptionsSync) subscriptions = System.Linq.Enumerable.ToArray(_subscriptions);
+    foreach (string ns in subscriptions)
+    {
+      try { Message?.Invoke(IpcPeerMessage.Create("namespace", ns, "namespace.changed", new { status = "unavailable" })); }
+      catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
+    }
+    while (_messages.TryDequeue(out _)) { }
+  }
 }

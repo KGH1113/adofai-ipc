@@ -10,6 +10,7 @@ namespace AdofaiIpc.Core;
 public sealed class IpcRegistry
 {
   private readonly object _sync = new object();
+  private bool _acceptingPeers = true;
   private readonly Dictionary<string, Entry> _namespaces = new Dictionary<string, Entry>();
   private readonly Dictionary<string, Peer> _peers = new Dictionary<string, Peer>();
   private readonly IpcDownloadTicketStore _tickets = new IpcDownloadTicketStore();
@@ -75,7 +76,7 @@ public sealed class IpcRegistry
   {
     lock (_sync)
     {
-      if (_peers.Count >= 64) return false;
+      if (!_acceptingPeers || _peers.Count >= 64) return false;
       _peers.Add(transport.Info.PeerId, new Peer(transport));
     }
     transport.Send(IpcPeerMessage.Create("welcome", null, "connection.welcome", new {
@@ -86,13 +87,14 @@ public sealed class IpcRegistry
 
   internal void Detach(IIpcPeer transport)
   {
-    AdofaiIpcNamespace[] handles;
+    AdofaiIpcNamespace[] handles; Peer peer;
     lock (_sync)
     {
-      if (!_peers.TryGetValue(transport.Info.PeerId, out Peer peer)) return;
+      if (!_peers.TryGetValue(transport.Info.PeerId, out peer)) return;
       _peers.Remove(transport.Info.PeerId);
       handles = peer.Subscriptions.Where(name => _namespaces.ContainsKey(name)).Select(name => _namespaces[name].Handle).ToArray();
     }
+    peer.Lifetime.Cancel();
     foreach (var handle in handles) Safe(() => handle.NotifyDisconnected(transport.Info));
   }
 
@@ -109,10 +111,12 @@ public sealed class IpcRegistry
     if (message.Kind == "subscribe") { Subscribe(peer, message.Namespace, message.Id); return; }
     if (message.Kind == "unsubscribe") { Unsubscribe(peer, message.Namespace); return; }
     Entry entry;
+    CancellationToken subscriptionLifetime = default;
     lock (_sync)
     {
       _namespaces.TryGetValue(message.Namespace, out entry);
       if (!peer.Subscriptions.Contains(message.Namespace)) entry = null;
+      else subscriptionLifetime = peer.SubscriptionLifetimes[message.Namespace].Token;
     }
     if (entry == null) { Reject(transport, message, "namespace_unavailable", "Subscribe to an available namespace first."); return; }
     if (!IsOriginAllowed(entry.Handle.Info, transport.Info.Origin)) { Reject(transport, message, "origin_not_allowed", "This application cannot access the namespace."); return; }
@@ -140,19 +144,30 @@ public sealed class IpcRegistry
       if (!_commandSlots.Wait(0)) { Reject(transport, message, "busy", "The game is handling too many commands. Try again."); return; }
       if (!peer.Remember(message.Id)) { _commandSlots.Release(); Reject(transport, message, "duplicate_command", "This command was already accepted."); return; }
     }
-    var linked = CancellationTokenSource.CreateLinkedTokenSource(transport.CancellationToken, entry.Handle.Lifetime.Token);
+    var linked = CancellationTokenSource.CreateLinkedTokenSource(transport.CancellationToken, peer.Lifetime.Token, subscriptionLifetime, entry.Handle.Lifetime.Token);
     var command = new IpcCommand(transport, message, linked.Token);
+    // A dispatcher may discard queued actions on shutdown. Release their admission
+    // slots at cancellation rather than depending on an action that never runs.
+    // Running handlers retain their slot until they actually finish.
+    int executionState = 0; // 0 queued, 1 running, 2 finished/cancelled
+    Action cancelQueued = () => {
+      if (Interlocked.CompareExchange(ref executionState, 2, 0) != 0) return;
+      linked.Dispose(); _commandSlots.Release();
+    };
+    var cancellation = command.CancellationToken.Register(cancelQueued);
+    if (Volatile.Read(ref executionState) == 2) cancellation.Dispose();
     transport.Send(IpcPeerMessage.Create("accepted", message.Namespace, "command.accepted", new { }, message.Id));
     Func<Task> execute = async () => {
-      try { if (!linked.IsCancellationRequested) await handler.Action(command).ConfigureAwait(false); }
+      if (Interlocked.CompareExchange(ref executionState, 1, 0) != 0) return;
+      try { if (!command.CancellationToken.IsCancellationRequested) await handler.Action(command).ConfigureAwait(false); }
       catch (OperationCanceledException) { }
       catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); command.Fail("handler_failed", "The mod could not complete the command."); }
-      finally { linked.Dispose(); _commandSlots.Release(); }
+      finally { Interlocked.Exchange(ref executionState, 2); cancellation.Dispose(); linked.Dispose(); _commandSlots.Release(); }
     };
     if (handler.MainThread)
     {
       try { _dispatchMainThread(() => { _ = execute(); }); }
-      catch { linked.Dispose(); _commandSlots.Release(); command.Fail("unavailable", "The game is shutting down."); }
+      catch { cancelQueued(); cancellation.Dispose(); command.Fail("unavailable", "The game is shutting down."); }
     }
     else _ = Task.Run(execute);
   }
@@ -166,7 +181,7 @@ public sealed class IpcRegistry
       if (entry != null && !IsOriginAllowed(entry.Handle.Info, peer.Transport.Info.Origin))
       { Reject(peer.Transport, IpcPeerMessage.Create("subscribe", name, null, null, id: correlationId), "origin_not_allowed", "This application cannot access the namespace."); return; }
       if (peer.Subscriptions.Count >= 64 && !peer.Subscriptions.Contains(name)) return;
-      peer.Subscriptions.Add(name);
+      if (peer.Subscriptions.Add(name)) peer.SubscriptionLifetimes.Add(name, new CancellationTokenSource());
     }
     peer.Transport.Send(IpcPeerMessage.Create("subscribed", name, "namespace.subscribed", new { }, correlationId));
     peer.Transport.Send(StateMessage(name, entry));
@@ -175,8 +190,14 @@ public sealed class IpcRegistry
 
   private void Unsubscribe(Peer peer, string name)
   {
-    Entry entry;
-    lock (_sync) { if (!peer.Subscriptions.Remove(name)) return; _namespaces.TryGetValue(name, out entry); }
+    Entry entry; CancellationTokenSource lifetime;
+    lock (_sync)
+    {
+      if (!peer.Subscriptions.Remove(name)) return;
+      lifetime = peer.SubscriptionLifetimes[name]; peer.SubscriptionLifetimes.Remove(name);
+      _namespaces.TryGetValue(name, out entry);
+    }
+    lifetime.Cancel();
     if (entry != null) Safe(() => entry.Handle.NotifyDisconnected(peer.Transport.Info));
   }
 
@@ -214,6 +235,17 @@ public sealed class IpcRegistry
   internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string approvedBrowserOrigin, out string code, out string reason)
     => _tickets.TryTake(token, origin, out source, out approvedBrowserOrigin, out code, out reason);
   internal void ClearDownloadTickets() => _tickets.Clear();
+
+  internal void Resume() { lock (_sync) _acceptingPeers = true; }
+
+  internal void Suspend()
+  {
+    Peer[] peers;
+    lock (_sync) { _acceptingPeers = false; peers = _peers.Values.ToArray(); }
+    // Detach cancels routing lifetime even if a transport's asynchronous close
+    // has not completed. Local peers receive unavailable before their queue ends.
+    foreach (Peer peer in peers) { Detach(peer.Transport); peer.Transport.Close(); }
+  }
 
   internal void Heartbeat()
   {
@@ -264,7 +296,9 @@ public sealed class IpcRegistry
   private sealed class Peer
   {
     internal readonly IIpcPeer Transport;
+    internal readonly CancellationTokenSource Lifetime = new CancellationTokenSource();
     internal readonly HashSet<string> Subscriptions = new HashSet<string>();
+    internal readonly Dictionary<string, CancellationTokenSource> SubscriptionLifetimes = new Dictionary<string, CancellationTokenSource>();
     private readonly HashSet<string> _ids = new HashSet<string>();
     private readonly Queue<string> _order = new Queue<string>();
     internal DateTime LastSeen = DateTime.UtcNow;
