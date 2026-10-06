@@ -8,7 +8,7 @@ namespace AdofaiIpc;
 
 public sealed class Main
 {
-  public const int ProtocolVersion = 2;
+  public const int ProtocolVersion = IpcProtocol.Version;
 
   public static Main Instance { get; private set; }
   public static IpcServer Server { get; private set; }
@@ -114,7 +114,7 @@ public sealed class Main
   {
     if (_enabled) return;
 
-    Server = new IpcServer();
+    Server = new IpcServer(AdofaiIpc.Registry);
     Server.Start();
     _enabled = true;
   }
@@ -136,16 +136,8 @@ public sealed class Main
       Version = Instance.Version
     });
 
-    ipc.Register("ping", request => new
-    {
-      pong = true,
-      server = "AdofaiIpc",
-      serverVersion = Instance.Version,
-      protocolVersion = ProtocolVersion,
-      port = Server?.Port ?? 0
-    });
-
-    ipc.Register("echo", request => request.Params ?? new JObject());
+    ipc.RegisterCommand("ping", command => command.Reply("ping.completed", new { pong = true }));
+    ipc.RegisterCommand("echo", command => command.Reply("echo.completed", command.Payload));
     ipc.MarkReady();
   }
 }

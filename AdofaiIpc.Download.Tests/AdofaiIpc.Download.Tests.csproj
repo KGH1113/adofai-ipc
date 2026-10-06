@@ -10,6 +10,5 @@
     <Compile Include="../AdofaiIpc/IpcDownloadSource.cs" Link="IpcDownloadSource.cs" />
     <Compile Include="../AdofaiIpc/Core/IpcDownloadTicketStore.cs" Link="IpcDownloadTicketStore.cs" />
     <Compile Include="../AdofaiIpc/Core/IpcErrorCodes.cs" Link="IpcErrorCodes.cs" />
-    <Compile Include="../AdofaiIpc/Server/ServerResponse.cs" Link="ServerResponse.cs" />
   </ItemGroup>
 </Project>

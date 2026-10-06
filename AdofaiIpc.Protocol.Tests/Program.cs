@@ -1,0 +1,134 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.WebSockets;
+using System.Text;
+using AdofaiIpc;
+using AdofaiIpc.Core;
+using AdofaiIpc.Server;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+internal static class Program
+{
+  static void Check(bool condition, string detail) { if (!condition) throw new Exception(detail); }
+  static async Task Main(string[] args)
+  {
+    var queue = new ConcurrentQueue<Action>();
+    var registry = new IpcRegistry(action => queue.Enqueue(action));
+    var ns = registry.RegisterNamespace("test-mod", new IpcNamespaceInfo { Version = "1.0.0", AllowedOrigins = new[] { "https://allowed.example" } });
+    int executions = 0;
+    ns.RegisterCommand("level.open", cmd => { Interlocked.Increment(ref executions); cmd.Reply("level.opened", new { levelId = (string)cmd.Payload["levelId"] }); });
+    ns.RegisterMainThreadCommand("queued.work", cmd => { Interlocked.Increment(ref executions); cmd.Reply("queued.done", new { }); });
+    ns.RegisterCommand("denied.work", cmd => cmd.Reject("bad_level", "Pick another level."));
+    ns.RegisterDownloadCommand("level.download", cmd => new IpcDownloadSource(new MemoryStream(Encoding.UTF8.GetBytes("a level file")), 12, "test.adofai"));
+    ns.RegisterCommand("peer.challenge", cmd => ns.SendCommandToPeer(cmd.PeerId, "peer.answer", new { input = 42 }));
+    ns.PeerEvent += evt => { if (evt.Name == "peer.answered") ns.SendToPeer(evt.PeerId, "peer.verified", evt.Payload, evt.CorrelationId); };
+    ns.PeerSubscribed += peer => ns.SendToPeer(peer.PeerId, "state.snapshot", new { revision = 1 });
+    var server = new IpcServer(registry); server.Start();
+    try
+    {
+      if (args.Contains("--serve"))
+      {
+        ns.MarkReady(); Console.WriteLine("IPC_TEST_SERVER_PORT=" + server.Port); Console.Out.Flush();
+        await Task.Delay(Timeout.Infinite); return;
+      }
+      using var client = await Socket.Connect(server.Port, "https://allowed.example");
+      var welcome = await client.Next("connection.welcome");
+      Check((int)welcome.Payload["protocolVersion"] == 3, "wire protocol");
+      await client.Send("subscribe", "test-mod", "namespace.subscribe", "subscribe1");
+      await client.Next("namespace.subscribed");
+      Check((string)(await client.Next("namespace.changed")).Payload["status"] == "initializing", "initializing snapshot");
+      ns.MarkReady();
+      Check((string)(await client.Next("namespace.changed")).Payload["status"] == "ready", "ready push");
+      await client.Next("state.snapshot");
+      await client.Send("command", "test-mod", "level.open", "open1", new { levelId = "abc" });
+      Check((await client.Next("command.accepted")).CorrelationId == "open1", "accepted correlation");
+      var opened = await client.Next("level.opened");
+      Check(opened.CorrelationId == "open1" && (string)opened.Payload["levelId"] == "abc", "named result correlation");
+      await client.Send("command", "test-mod", "level.open", "open1");
+      Check((string)(await client.Next("command.rejected")).Payload["code"] == "duplicate_command", "deduplication");
+      Check(executions == 1, "duplicate repeated side effect");
+      await client.Send("command", "test-mod", "denied.work", "deny1");
+      await client.Next("command.accepted");
+      Check((string)(await client.Next("command.rejected")).Payload["code"] == "bad_level", "domain rejection");
+      ns.Publish("progress.changed", new { revision = 2 });
+      Check((int)(await client.Next("progress.changed")).Payload["revision"] == 2, "unsolicited push");
+      await client.Send("command", "test-mod", "peer.challenge", "challenge1");
+      await client.Next("command.accepted"); var challenge = await client.Next("peer.answer");
+      await client.Send("event", "test-mod", "peer.answered", "answer1", new { output = 84 }, challenge.Id);
+      Check((await client.Next("peer.verified")).CorrelationId == challenge.Id, "reverse peer command correlation");
+      await client.Send("command", "test-mod", "level.download", "download1");
+      await client.Next("command.accepted"); var ticket = await client.Next("download.ready");
+      using var http = new HttpClient();
+      var request = new HttpRequestMessage(HttpMethod.Get, (string)ticket.Payload["url"]); request.Headers.Add("Origin", "https://allowed.example");
+      using var response = await http.SendAsync(request);
+      Check(response.IsSuccessStatusCode && await response.Content.ReadAsStringAsync() == "a level file", "stream download bytes");
+      Check(response.Headers.GetValues("Access-Control-Allow-Origin").Single() == "https://allowed.example", "download CORS");
+      Check((await http.GetAsync((string)ticket.Payload["url"])).StatusCode == HttpStatusCode.NotFound, "single-use download");
+      using var forbidden = await Socket.Connect(server.Port, "https://forbidden.example");
+      await forbidden.Next("connection.welcome"); await forbidden.Send("subscribe", "test-mod", "namespace.subscribe", "forbidden1");
+      Check((string)(await forbidden.Next("command.rejected")).Payload["code"] == "origin_not_allowed", "origin authorization");
+      await client.Send("subscribe", "late-mod", "namespace.subscribe", "late1"); await client.Next("namespace.subscribed");
+      Check((string)(await client.Next("namespace.changed")).Payload["status"] == "unavailable", "missing namespace snapshot");
+      var late = registry.RegisterNamespace("late-mod", new IpcNamespaceInfo());
+      await client.Next("namespace.changed"); late.PeerSubscribed += peer => late.SendToPeer(peer.PeerId, "late.snapshot", new { }); late.MarkReady();
+      await client.Next("namespace.changed"); await client.Next("late.snapshot");
+      await client.Send("command", "test-mod", "queued.work", "queued1"); await client.Next("command.accepted");
+      registry.UnregisterNamespace("test-mod"); await client.Next("namespace.changed");
+      while (queue.TryDequeue(out var action)) action(); await Task.Delay(30);
+      Check(executions == 1, "unload did not cancel queued game-thread command");
+      var localNs = registry.RegisterNamespace("local-mod", new IpcNamespaceInfo());
+      localNs.RegisterCommand("echo", cmd => cmd.Reply("echoed", cmd.Payload)); localNs.MarkReady();
+      using var local = new IpcLocalPeer(registry, "renderer");
+      var localResult = new TaskCompletionSource<IpcPeerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+      local.Message += msg => { if (msg.Name == "echoed") localResult.TrySetResult(msg); };
+      local.Subscribe("local-mod"); var localId = local.SendCommand("local-mod", "echo", new { value = 7 });
+      Check((await localResult.Task.WaitAsync(TimeSpan.FromSeconds(3))).CorrelationId == localId, "same-process router");
+      Console.WriteLine("PASS: real WebSocket lifecycle, commands/events, dedup, origins, streamed tickets, unload cancellation, local peer.");
+    }
+    finally { server.Stop(); }
+  }
+
+  sealed class Socket : IDisposable
+  {
+    readonly ClientWebSocket socket = new();
+    readonly ConcurrentQueue<IpcPeerMessage> messages = new();
+    readonly SemaphoreSlim received = new(0);
+    readonly CancellationTokenSource lifetime = new();
+    public static async Task<Socket> Connect(int port, string origin)
+    {
+      var value = new Socket(); value.socket.Options.AddSubProtocol(IpcProtocol.Subprotocol);
+      value.socket.Options.SetRequestHeader("Origin", origin);
+      await value.socket.ConnectAsync(new Uri("ws://127.0.0.1:" + port + IpcProtocol.WebSocketPath), CancellationToken.None);
+      _ = value.Read(); return value;
+    }
+    async Task Read()
+    {
+      try
+      {
+        byte[] buffer = new byte[8192];
+        while (!lifetime.IsCancellationRequested)
+        {
+          using var body = new MemoryStream(); WebSocketReceiveResult result;
+          do { result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), lifetime.Token); if (result.MessageType == WebSocketMessageType.Close) return; body.Write(buffer, 0, result.Count); } while (!result.EndOfMessage);
+          var msg = JsonConvert.DeserializeObject<IpcPeerMessage>(Encoding.UTF8.GetString(body.ToArray()));
+          if (msg.Kind == "ping") { await Send("pong", null, "connection.pong", Guid.NewGuid().ToString("N")); continue; }
+          messages.Enqueue(msg); received.Release();
+        }
+      }
+      catch (OperationCanceledException) { }
+      catch (WebSocketException) { }
+    }
+    public async Task Send(string kind, string ns, string name, string id, object payload = null, string correlationId = null)
+    {
+      var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(IpcPeerMessage.Create(kind, ns, name, payload, correlationId, id)));
+      await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+    }
+    public async Task<IpcPeerMessage> Next(string name)
+    {
+      using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+      while (true) { await received.WaitAsync(timeout.Token); if (messages.TryDequeue(out var msg) && msg.Name == name) return msg; }
+    }
+    public void Dispose() { try { socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None).GetAwaiter().GetResult(); } catch { } lifetime.Cancel(); socket.Dispose(); }
+  }
+}

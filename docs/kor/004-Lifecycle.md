@@ -1,145 +1,26 @@
-# AdofaiIpc 개발 가이드 - 라이프사이클
+# 수명과 스레드
 
-## [목차로 이동](000-DevelopGuide.md)
+[목차](000-DevelopGuide.md) | [English](../en/004-Lifecycle.md)
 
-1. [Listener 소유권](#1-listener-%EC%86%8C%EC%9C%A0%EA%B6%8C)
-2. [Register와 Unregister](#2-register%EC%99%80-unregister)
-3. [Thread 구분](#3-thread-%EA%B5%AC%EB%B6%84)
-4. [Origin policy와 lifecycle](#4-origin-policy%EC%99%80-lifecycle)
-5. [모드 lifecycle 패턴](#5-%EB%AA%A8%EB%93%9C-lifecycle-%ED%8C%A8%ED%84%B4)
+initializing 중 handler와 peer listener를 등록하고 데이터를 준비한 뒤 MarkReady하세요.
+초기화 실패는 MarkError(code,message), 재초기화 시작은 MarkInitializing으로 표시합니다.
+ready 전에 명령은 실행되지 않습니다. 비활성화 시 UnregisterNamespace는 명령 token과 티켓을
+취소하고 unavailable을 알리며 소유 peer 정리를 유도합니다.
 
----
+PeerSubscribed는 ready 수명 snapshot 뒤 실행됩니다. 모드가 없거나 초기화 중일 때 먼저 구독한
+peer도 MarkReady에서 hydrate합니다. client도 연결·ready 대기 전에 snapshot/event/command
+listener를 설치하세요. snapshot과 delta의 revision은 각 도메인이 책임집니다.
 
-## 1. Listener 소유권
+일반 handler와 PeerSubscribed/PeerDisconnected/PeerEvent는 Unity main thread 밖에서
+실행될 수 있습니다. 이벤트에서 Unity를 만질 때는 주입한 dispatcher를 사용하세요.
+RegisterMainThreadCommand만 자동으로 게임 스레드를 선택합니다. 그 안에서는 짧은 작업만
+실행하고 다운로드·압축·네트워크·대기는 background로 옮겨 frame을 막지 마세요.
 
-AdofaiIpc는 하나의 HTTP listener를 소유하는 infrastructure mod입니다.
+재연결은 peer/connection ID를 바꾸고 구독을 복원하며 새 snapshot을 받습니다. 명령은 자동
+재전송하지 않습니다. 기존 작업의 실패·취소·복구는 application session에서 처리합니다.
+wire mismatch는 재시도를 멈춥니다. 최초 서버 부재는 UNAVAILABLE이므로 앱 supervisor에서
+초기 연결 재시도 정책을 구현하세요.
 
-다른 모드는 별도의 localhost 서버를 열지 않고, AdofaiIpc registry에 namespace와
-method만 등록합니다. 이렇게 하면 여러 모드가 동시에 브라우저나 외부 도구와 통신해도
-포트 충돌을 줄이고 client protocol을 하나로 유지할 수 있습니다.
-
----
-
-## 2. Register와 Unregister
-
-AdofaiIpc registry는 같은 namespace 또는 method가 다시 등록되어도 예외를 던지지 않고
-최신 정보로 갱신합니다.
-
-따라서 모드가 다시 활성화되어도 같은 register 코드를 반복해서
-실행할 수 있습니다.
-
-namespace를 등록하거나 다시 등록하면 상태는 `Initializing`으로 시작합니다. handler 등록과
-초기화를 마친 뒤 `MarkReady()`를 호출해야 요청을 받을 수 있습니다. 초기화를 완료할 수
-없으면 `MarkError()`로 실패 상태를 기록합니다.
-
-기능이 꺼질 때는 해당 모드가 소유한 namespace를 해제하는 것을 권장합니다.
-
-```csharp
-public void Disable() {
-    AdofaiIpc.AdofaiIpc.UnregisterNamespace("tufhelper2");
-}
-```
-
-namespace 전체가 아니라 일부 method만 내리고 싶다면 `AdofaiIpcNamespace.Unregister`를
-사용할 수 있습니다.
-
----
-
-## 3. Thread 구분
-
-HTTP 요청은 AdofaiIpc listener thread에서 들어옵니다.
-
-파일 읽기, JSON 변환, 단순 계산처럼 Unity 상태를 건드리지 않는 작업은 일반 `Register`로
-처리할 수 있습니다.
-
-반대로 다음과 같은 작업은 Unity main thread에서 실행되어야 합니다.
-
-* Unity object 생성 또는 접근
-* scene, level, editor 상태 변경
-* ADOFAI controller 또는 game state 접근
-* Unity API 호출
-
-이 경우에는 `RegisterMainThread`를 사용합니다.
-
-```csharp
-ipc.RegisterMainThread("level.open", request => {
-    // Unity main thread에서 실행되어야 하는 작업
-    return new {
-        opened = true
-    };
-});
-```
-
----
-
-## 4. Origin policy와 lifecycle
-
-Origin policy는 namespace metadata의 일부입니다. 따라서 namespace를 등록하는 시점에
-`AllowedOrigins`도 함께 전달하는 것을 권장합니다.
-
-같은 namespace를 다시 등록하면 metadata가 갱신되므로, `OnEnable()`에서 register를
-반복해도 최신 Origin policy가 적용됩니다.
-
-```csharp
-AdofaiIpc.AdofaiIpc.RegisterNamespace(
-    "tufhelper2",
-    new AdofaiIpc.IpcNamespaceInfo {
-        DisplayName = "TUFHelper2",
-        Version = Main.Instance.Version.ToString(),
-        AllowedOrigins = new[] {
-            "https://tuforums.com",
-            "http://localhost",
-            "http://127.0.0.1"
-        }
-    }
-);
-```
-
----
-
-## 5. 모드 lifecycle 패턴
-
-AdofaiIpc를 사용하는 모드는 IPC 등록을 하나의 Feature로 분리하는 방식을 권장합니다.
-
-```csharp
-public sealed class IpcFeature {
-    private const string Namespace = "tufhelper2";
-
-    public void Enable() {
-        var ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
-            Namespace,
-            new AdofaiIpc.IpcNamespaceInfo {
-                DisplayName = "TUFHelper2",
-                Version = Main.Instance.Version.ToString(),
-                AllowedOrigins = new[] {
-                    "https://tuforums.com",
-                    "http://localhost",
-                    "http://127.0.0.1"
-                }
-            }
-        );
-
-        ipc.Register("health", Health);
-        ipc.RegisterMainThread("level.open", OpenLevel);
-        ipc.MarkReady();
-    }
-
-    public void Disable() {
-        AdofaiIpc.AdofaiIpc.UnregisterNamespace(Namespace);
-    }
-
-    private static object Health(AdofaiIpc.Core.IpcRequest request) {
-        return new {
-            ok = true
-        };
-    }
-
-    private static object OpenLevel(AdofaiIpc.Core.IpcRequest request) {
-        return new {
-            accepted = true
-        };
-    }
-}
-```
-
-이 패턴은 모드의 활성화/비활성화 흐름과 IPC registry 상태를 함께 맞춰줍니다.
+렌더링 같은 작업의 lease, virtual clock, input gate, frame ACK는 전송 heartbeat와 별도로
+유지합니다. 파일 소비가 끝나야 다음 frame을 만들 수 있다면 in-flight1을 지키세요.
+UI 프로세스가 이미 종료돼도 close/dispose에서 gate와 파일·자원을 정리해야 합니다.

@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <ProductVersion>0.4.1</ProductVersion>
+    <ProductVersion>1.0.0</ProductVersion>
     <ProductVersionCore>$([System.Text.RegularExpressions.Regex]::Replace('$(ProductVersion)', '-.*$', ''))</ProductVersionCore>
     <Version>$(ProductVersion)</Version>
     <VersionPrefix>$(ProductVersionCore)</VersionPrefix>

@@ -1,97 +1,30 @@
-export type IpcRequestId = string | number | null;
-
-export interface IpcCallOptions<TParams = unknown> {
-  namespace: string;
-  method: string;
-  params?: TParams;
-  id?: IpcRequestId;
-  timeoutMs?: number;
-}
-
-export interface IpcRequestOptions {
-  timeoutMs?: number;
-}
-
-export interface WaitForNamespaceOptions {
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-  requestTimeoutMs?: number;
-  status?: "registered" | "ready";
-}
-
-export interface IpcSuccessResponse<TResult = unknown> {
-  ok: true;
-  result: TResult;
-  id?: IpcRequestId;
-}
-
-export interface IpcErrorInfo {
-  code: string;
-  message: string;
-}
-
-export interface IpcErrorResponse {
-  ok: false;
-  result?: null;
-  error: IpcErrorInfo;
-  id?: IpcRequestId;
-}
-
-export type IpcResponse<TResult = unknown> =
-  | IpcSuccessResponse<TResult>
-  | IpcErrorResponse;
-
-export interface IpcHealthResponse {
-  ok: true;
-  server: "AdofaiIpc";
-  serverVersion?: string;
-  protocolVersion: number;
-  port: number;
-}
-
-export type IpcNamespaceStatus = "initializing" | "ready" | "error";
-
-export interface IpcNamespaceErrorInfo {
-  code: string;
-  message: string;
-}
-
-export interface IpcNamespaceSummary {
+export type IpcConnectionState = "connected" | "reconnecting" | "disconnected" | "closed" | "incompatible";
+export type IpcNamespaceStatus = "initializing" | "ready" | "error" | "unavailable";
+export interface IpcErrorInfo { code: string; message: string }
+export interface IpcMessage<TPayload = unknown> {
+  kind: string;
+  namespace?: string | null;
   name: string;
-  displayName: string;
-  version: string;
-  status: IpcNamespaceStatus;
+  id: string;
+  correlationId?: string;
+  payload: TPayload;
 }
-
-export interface IpcNamespacesResponse {
-  namespaces: IpcNamespaceSummary[];
+/** Byte transport only. Protocol, subscription and reconnection belong to the SDK. */
+export interface IpcTransport {
+  connect(): Promise<void>;
+  send(text: string): void | Promise<void>;
+  close(): void | Promise<void>;
+  onMessage(listener: (text: string) => void): () => void;
+  onClose(listener: (reason?: unknown) => void): () => void;
 }
-
-export interface IpcNamespaceDetail {
-  namespace: string;
-  displayName: string;
-  version: string;
-  status: IpcNamespaceStatus;
-  error?: IpcNamespaceErrorInfo | null;
-  methods: string[];
-}
-
-export interface AdofaiIpcClientOptions {
-  baseUrl?: string;
-  fetch?: typeof fetch;
-  requestTimeoutMs?: number;
-  /** @deprecated Use requestTimeoutMs instead. */
-  timeoutMs?: number;
-}
-
-export interface TryConnectOptions {
-  host?: string;
+export type IpcTransportFactory = (url: string, protocol: string) => IpcTransport;
+export interface ConnectIpcOptions {
+  host?: "127.0.0.1" | "localhost";
   startPort?: number;
   endPort?: number;
-  fetch?: typeof fetch;
-  probeTimeoutMs?: number;
-  requestTimeoutMs?: number;
-  onVersionMismatch?: (error: import("./errors").IpcVersionMismatchError) => void;
-  /** @deprecated Use probeTimeoutMs and requestTimeoutMs instead. */
-  timeoutMs?: number;
+  connectTimeoutMs?: number;
+  transportFactory?: IpcTransportFactory;
+  onProtocolMismatch?: (error: import("./errors").IpcProtocolMismatchError) => void;
 }
+export interface IpcCommandOptions { id?: string; signal?: AbortSignal }
+export interface IpcReadyOptions { timeoutMs?: number; signal?: AbortSignal }

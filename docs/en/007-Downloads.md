@@ -1,34 +1,33 @@
 # Streaming downloads
 
-Since AdofaiIpc 0.4.0, a mod can register a download method on the existing localhost
-listener. It needs neither a separate server nor a browser `Blob`.
+[Guide](000-DevelopGuide.md) | [한국어](../kor/007-Downloads.md)
+
+Create a ticket with a WebSocket command and transfer file bytes through the HTTP stream:
 
 ```csharp
-ipc.RegisterDownload("recording.export", request =>
-{
-  // Resolve a caller-provided ID in your own storage; do not turn it into a path.
-  long byteLength = FindRecordingLength(request);
-  return new IpcDownloadResponse(
-    "audio/wav",
-    byteLength,
-    "recording.wav",
-    destination => WriteRecordingTo(request, destination));
+ipc.RegisterDownloadCommand("recording.export", command => {
+    // Resolve a domain ID through storage; do not accept an arbitrary filesystem path.
+    var file = recordings.Find((string)command.Payload["recordingId"]);
+    if (file == null) return new IpcDownloadError("recording_missing", "Record again.");
+    return new IpcDownloadSource(file.OpenRead(), file.ByteLength, "recording.wav", "audio/wav");
 });
 ```
 
-The handler returns `IpcDownloadSource` or `IpcDownloadError`.
-`IpcDownloadResponse` is a convenience form of `IpcDownloadSource`. The callback runs on
-an HTTP worker when the ticket is consumed, so it must not call Unity APIs directly. It
-must write exactly the declared byte length and must not close the supplied stream. With
-the stream constructor, AdofaiIpc closes the source when the download or ticket ends.
+The handler returns IpcDownloadSource or IpcDownloadError. A public callback constructor accepts
+Action<Stream>, byteLength, fileName, contentType; IpcDownloadResponse remains a convenience.
+The writer runs on an HTTP worker when consumed, writes exactly the declared length, and leaves
+the supplied response stream open. It must not read Unity objects there. Source streams are owned
+and disposed by the ticket/download lifecycle.
 
-Clients invoke the method with the existing `POST /ipc` call. The successful response
-contains a small `result` object with `Url` and `ByteLength`. Opening `Url` as a link
-lets the browser save the `Content-Disposition: attachment` response using its native
-download flow, without reading the complete audio into JavaScript memory.
+The issuer receives the correlated event `download.ready` with lowercase `{url,byteLength}`.
+Open url as an attachment link for native browser saving without a large JavaScript Blob. Fetch
+is also available to allowed web applications. Responses use bounded64KiB flushed chunks,
+Content-Disposition, X-Byte-Length, no-store and nosniff. Chunked transfer means Content-Length
+is absent; use the byteLength from the event for expected size/progress.
 
-Tickets expire after 60 seconds and are single-use. At most 128 tickets and four active
-downloads are allowed. Unregistering a namespace or stopping the server revokes pending
-tickets. The namespace Origin policy applies when creating a ticket and when a download
-request has an Origin header. Native browser downloads may omit that header, so treat a
-ticket URL as a secret and do not expose it in logs or shared pages.
+Tickets expire after60s, are consumed once, and are bounded to128 tickets and4 concurrent downloads.
+Namespace unload/server stop revokes pending sources. Ticket authorization uses a copied namespace
+Origin policy. Browser CORS read access is granted only after successful ticket consumption with
+an explicit matching allowlist; unrestricted/native tickets receive no CORS grant. Rejected Origin
+does not consume the ticket. Attachment navigation/native tools may omit Origin. Treat URLs as
+short-lived bearer capabilities and keep them scoped to the issuing peer's application flow.

@@ -1,209 +1,57 @@
-# AdofaiIpc 개발 가이드 - 모드 API
+# 모드 API
 
-## [목차로 이동](000-DevelopGuide.md)
+[목차](000-DevelopGuide.md) | [English](../en/002-ModApi.md)
 
-1. [Namespace 등록](#1-namespace-%EB%93%B1%EB%A1%9D)
-2. [Method 등록](#2-method-%EB%93%B1%EB%A1%9D)
-3. [등록 해제](#3-%EB%93%B1%EB%A1%9D-%ED%95%B4%EC%A0%9C)
-4. [Origin 제한](#4-origin-%EC%A0%9C%ED%95%9C)
-5. [이름 규칙](#5-%EC%9D%B4%EB%A6%84-%EA%B7%9C%EC%B9%99)
-6. [Lifecycle 예시](#6-lifecycle-%EC%98%88%EC%8B%9C)
-7. [모드 준비 상태](#7-%EB%AA%A8%EB%93%9C-%EC%A4%80%EB%B9%84-%EC%83%81%ED%83%9C)
-
----
-
-## 1. Namespace 등록
-
-AdofaiIpc를 사용하는 모드는 먼저 자신의 namespace를 등록해야 합니다.
+모드마다 namespace 하나를 등록합니다. 새 handle은 initializing으로 시작합니다. 같은 namespace를
+다시 등록하면 기존 handle을 취소하고 handler와 티켓을 제거한 뒤 새 handle을 만듭니다.
+handler를 모두 다시 등록하세요. 같은 command 이름의 재등록은 해당 handler를 교체합니다.
 
 ```csharp
 using AdofaiIpc;
 
-AdofaiIpcNamespace ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
-    "tufhelper2",
-    new IpcNamespaceInfo {
-        DisplayName = "TUFHelper2",
-        Version = Main.Instance.Version.ToString(),
-        AllowedOrigins = new[] {
-            "https://tuforums.com",
-            "http://localhost",
-            "http://127.0.0.1"
-        }
+var ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace("example-mod", new IpcNamespaceInfo {
+    DisplayName = "Example Mod", Version = "1.0.0",
+    AllowedOrigins = new[] { "https://example.com", "http://localhost", "http://127.0.0.1" }
+});
+ipc.RegisterMainThreadCommand("level.open", command => {
+    string levelId = (string)command.Payload["levelId"];
+    if (string.IsNullOrEmpty(levelId)) {
+        command.Reject("invalid_level", "Choose a level first.");
+        return;
     }
-);
-```
-
-namespace는 모드 단위로 하나를 소유하는 것을 권장합니다. 같은 namespace를 다시 등록하면
-기존 namespace의 metadata가 갱신되고 상태는 `Initializing`으로 초기화됩니다. 기존
-method들은 유지됩니다.
-
----
-
-## 2. Method 등록
-
-일반 handler는 `Register`로 등록합니다.
-
-```csharp
-ipc.Register("health", request => new {
-    ok = true,
-    mod = "TUFHelper2"
+    OpenLevel(levelId); // application service; Unity work runs on the game thread
+    command.Reply("level.opened", new { levelId });
 });
-```
-
-Unity object, scene, level state, ADOFAI controller처럼 main thread가 필요한 작업은
-`RegisterMainThread`를 사용합니다.
-
-```csharp
-ipc.RegisterMainThread("level.open", request => {
-    // Unity 또는 ADOFAI 상태를 만지는 작업
-    return new {
-        opened = true
-    };
-});
-```
-
-같은 method를 다시 등록하면 기존 handler가 새 handler로 교체됩니다. 이 동작 덕분에
-모드가 활성화될 때마다 register해도 중복 등록 예외가 발생하지 않습니다.
-
-모든 handler 등록과 모드 초기화를 마친 뒤 요청을 명시적으로 허용합니다.
-
-```csharp
+ipc.PeerSubscribed += peer =>
+    ipc.SendToPeer(peer.PeerId, "library.snapshot", new { revision = 1 });
 ipc.MarkReady();
+
+// On a domain change:
+ipc.Publish("library.changed", new { revision = 2 });
+// On disable/unload:
+AdofaiIpc.AdofaiIpc.UnregisterNamespace("example-mod");
 ```
 
----
+RegisterCommand는 background worker에서 실행하는 Action<IpcCommand>, RegisterAsyncCommand는
+Func<IpcCommand,Task>를 받습니다. Unity를 접근하는 RegisterMainThreadCommand는 게임 스레드에
+작업을 큐잉합니다. handler는 Reply, Reject 또는 Publish로 실제 도메인 결과를 표현해야 합니다.
+accepted는 실행을 허용했다는 뜻입니다. 완료를 의미하지 않습니다. 예외는 command.failed를
+보내며, handler가 반환한 것만으로 자동 결과 이벤트를 만들지는 않습니다.
 
-## 3. 등록 해제
+IpcCommand의 Id, Namespace, Name, PeerId, ConnectionId, Origin, JObject Payload,
+CancellationToken을 사용합니다. peer identity는 서버가 정합니다. 연결 종료나 namespace 해제는
+token을 취소합니다. 작업·lease·권한 token을 peer에 묶는 정책은 애플리케이션에서 구현합니다.
 
-method 하나만 해제하려면 namespace 객체에서 `Unregister`를 호출합니다.
+Publish는 허용된 구독자에게 이벤트를 보냅니다. SendToPeer는 구독한 특정 peer에 이벤트를 보내며
+correlationId를 지정할 수 있습니다. SendCommandToPeer는 역방향 명령 ID를 반환합니다.
+그 결과는 PeerEvent의 CorrelationId로 연결합니다. PeerSubscribed에서 초기 snapshot을 보내고
+PeerDisconnected에서 소유 자원을 정리합니다. 구독 snapshot 콜백은 ready일 때 실행됩니다.
 
-```csharp
-ipc.Unregister("health");
-```
+namespace는 소문자·숫자·하이픈, command/event는 여기에 점도 사용합니다. AllowedOrigins는 구독과
+메시지를 제한합니다. 기본 포트 Origin을 허용하면 같은 scheme/host의 개발 포트도 허용하고,
+명시한 비기본 포트는 정확히 일치해야 합니다. Origin 없는 네이티브 peer는 허용하며 빈 목록은
+메시지 Origin을 제한하지 않습니다.
 
-모드가 소유한 namespace 전체를 해제하려면 public facade에서
-`UnregisterNamespace`를 호출합니다.
-
-```csharp
-AdofaiIpc.AdofaiIpc.UnregisterNamespace("tufhelper2");
-```
-
-Feature가 꺼질 때 namespace 전체를 내려야 하는 경우에는 namespace 이름을 상수로
-관리하는 편이 안전합니다.
-
----
-
-## 4. Origin 제한
-
-브라우저에서 호출되는 IPC는 namespace별로 허용할 Origin을 지정할 수 있습니다.
-
-```csharp
-new IpcNamespaceInfo {
-    DisplayName = "TUFHelper2",
-    Version = Main.Instance.Version.ToString(),
-    AllowedOrigins = new[] {
-        "https://tuforums.com",
-        "http://localhost",
-        "http://127.0.0.1"
-    }
-}
-```
-
-`AllowedOrigins`가 `null`이거나 비어 있으면 해당 namespace는 Origin 제한을 두지 않습니다.
-`Origin` header가 없는 curl, native app, local tool 요청도 허용됩니다.
-
-`http://localhost`처럼 포트 없이 등록하면 `http://localhost:5173` 같은 개발 서버도
-같은 scheme/host로 보고 허용합니다. 포트까지 제한하고 싶다면
-`http://localhost:5173`처럼 정확한 Origin을 등록하면 됩니다.
-
-> ⚠️ **주의**
->
-> CORS는 브라우저가 따르는 정책일 뿐입니다. 실제 접근 제어는 AdofaiIpc가
-> `POST /ipc` 요청의 `namespace`와 `Origin`을 함께 검사해서 수행합니다.
-
----
-
-## 5. 이름 규칙
-
-namespace와 method는 HTTP client가 직접 전달하는 public protocol 값입니다.
-읽기 쉽고 충돌이 적은 이름을 사용해주세요.
-
-* namespace
-    * 소문자, 숫자, `-` 사용 가능
-    * 예: `tufhelper2`, `tuf-replay`
-* method
-    * 소문자, 숫자, `-`, `.` 사용 가능
-    * 예: `health`, `level.open`, `records.list`
-
-namespace에는 `.`을 사용할 수 없습니다.
-
----
-
-## 6. Lifecycle 예시
-
-활성화 시 register하고 비활성화 시 unregister하는 흐름을 권장합니다.
-
-```csharp
-using AdofaiIpc;
-
-public sealed class IpcFeature {
-    private const string Namespace = "tufhelper2";
-
-    public void Enable() {
-        AdofaiIpcNamespace ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace(
-            Namespace,
-            new IpcNamespaceInfo {
-                DisplayName = "TUFHelper2",
-                Version = Main.Instance.Version.ToString(),
-                AllowedOrigins = new[] {
-                    "https://tuforums.com",
-                    "http://localhost",
-                    "http://127.0.0.1"
-                }
-            }
-        );
-
-        ipc.Register("health", Health);
-        ipc.RegisterMainThread("level.open", OpenLevel);
-        ipc.MarkReady();
-    }
-
-    public void Disable() {
-        AdofaiIpc.AdofaiIpc.UnregisterNamespace(Namespace);
-    }
-
-    private static object Health(AdofaiIpc.Core.IpcRequest request) {
-        return new {
-            ok = true
-        };
-    }
-
-    private static object OpenLevel(AdofaiIpc.Core.IpcRequest request) {
-        return new {
-            accepted = true
-        };
-    }
-}
-```
-
----
-
-## 7. 모드 준비 상태
-
-listener 발견과 namespace 등록만으로는 모드의 초기화 완료를 판단할 수 없습니다.
-AdofaiIpc는 모든 namespace를 `Initializing` 상태로 등록하고, 소유한 모드가 준비 완료를
-표시하기 전까지 method 호출을 차단합니다.
-
-```csharp
-try {
-    InitializeMode();
-    ipc.MarkReady();
-} catch (Exception error) {
-    ipc.MarkError("initialization_failed", error.Message);
-}
-```
-
-registry는 namespace discovery에서 `initializing`, `ready`, `error` 상태를 제공합니다.
-초기화 중이거나 초기화가 실패한 namespace를 호출하면 handler 실행 전에 각각
-`namespace_initializing`, `namespace_error`가 반환됩니다. 나중에 다시 초기화할 때는 작업을
-시작하기 전에 `MarkInitializing()`을 호출합니다.
+같은 프로세스의 모드는 CreateLocalPeer(name)을 자체 port로 감싸 주입할 수 있습니다.
+Message listener를 먼저 등록한 뒤 Subscribe, SendCommand, SendEvent를 사용하고 Dispose합니다.
+동일한 router를 사용하므로 소켓이나 HTTP polling이 필요하지 않습니다.

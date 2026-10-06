@@ -7,7 +7,7 @@
 AdofaiIpc.DependencyShim.dll
 AdofaiIpcBootstrap.json
 DependencyBootstrap/state.json
-DependencyBootstrap/versions/0.4.1/AdofaiIpc.Bootstrap.dll
+DependencyBootstrap/versions/1.0.0/AdofaiIpc.Bootstrap.dll
 ```
 
 `Info.json`은 `AdofaiIpc.DependencyShim.DependencyShim.Load`를 가리킵니다. manifest는
@@ -29,3 +29,5 @@ GameObject, event 구독, coroutine, 프레임별 callback이 없습니다.
 그 실행에서는 의존 모드 core를 시작하지 않은 채 영향을 받은 모드 목록을 안내창 하나에
 표시합니다. 사용자는 AdofaiIpc만 다시 설치하고 게임을 완전히 종료한 뒤 재실행하면 됩니다.
 신규 설치는 처음부터 최종 구조를 사용하므로 별도 전환이 필요하지 않습니다.
+
+v1을 사용하는 모드는 `MinimumAdofaiIpcVersion`을 `1.0.0`으로 올리고 새 bootstrap/shim 체크섬을 lock에 고정합니다. 공개 v1 릴리즈 전에는 로컬 빌드를 설치합니다.

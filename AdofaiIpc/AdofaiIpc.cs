@@ -6,7 +6,7 @@ namespace AdofaiIpc;
 
 public static class AdofaiIpc
 {
-  internal static IpcRegistry Registry { get; } = new IpcRegistry();
+  internal static IpcRegistry Registry { get; } = new IpcRegistry(MainThreadDispatcher.Run);
 
   public static AdofaiIpcNamespace RegisterNamespace(string name, IpcNamespaceInfo info = null)
   {
@@ -17,6 +17,8 @@ public static class AdofaiIpc
   {
     return Registry.UnregisterNamespace(name);
   }
+
+  public static IpcLocalPeer CreateLocalPeer(string name) => new IpcLocalPeer(Registry, name);
 
   public static bool IsMainThread => MainThreadDispatcher.IsMainThread;
 

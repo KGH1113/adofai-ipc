@@ -5,12 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using AdofaiIpc;
 using AdofaiIpc.Core;
-using AdofaiIpc.Server;
-
-ServerResponse preflight = ServerResponse.NoContent();
-Assert(preflight.StatusCode == 204 && preflight.ApplyCorsHeaders && preflight.DownloadSource == null,
-  "CORS preflight must use the JSON/no-content response path");
-Console.WriteLine("PASS preflight keeps CORS headers enabled");
 
 byte[] payload = Enumerable.Range(0, 200_000).Select(index => (byte)(index % 251)).ToArray();
 using (var source = new IpcDownloadSource(new MemoryStream(payload), payload.Length, "sample.wav", "audio/wav"))
@@ -41,6 +35,18 @@ Assert(ReferenceEquals(ticketSource, taken), "ticket returned wrong source");
 Assert(!tickets.TryTake(token, "https://example.test", out _, out _, out _), "ticket was reusable");
 taken.Dispose();
 Console.WriteLine("PASS origin check and single-use ticket");
+
+var corsTickets = new IpcDownloadTicketStore();
+Assert(corsTickets.TryCreate("test", new CallbackSource(_ => { }, 0), new[] { "https://allowed.test" }, out string corsToken, out _, out _), "CORS ticket creation failed");
+Assert(!corsTickets.TryTake(corsToken, "https://forbidden.test", out _, out _, out _, out _), "forbidden Origin consumed CORS ticket");
+Assert(corsTickets.TryTake(corsToken, "https://allowed.test", out var corsSource, out string approvedOrigin, out _, out _), "allowed CORS ticket rejected");
+Assert(approvedOrigin == "https://allowed.test", "CORS grant must come from an explicitly authorized ticket");
+corsSource.Dispose();
+Assert(corsTickets.TryCreate("test", new CallbackSource(_ => { }, 0), null, out string unrestrictedToken, out _, out _), "unrestricted ticket creation failed");
+Assert(corsTickets.TryTake(unrestrictedToken, "https://arbitrary.test", out var unrestrictedSource, out string unrestrictedGrant, out _, out _), "native/unrestricted ticket failed");
+Assert(unrestrictedGrant == null, "unrestricted ticket must never reflect a CORS Origin");
+unrestrictedSource.Dispose();
+Console.WriteLine("PASS explicit allowlist CORS grant and unrestricted no-grant");
 
 var concurrentTickets = new IpcDownloadTicketStore();
 Assert(concurrentTickets.TryCreate("test", new CallbackSource(_ => { }, 0), null, out string concurrentToken, out _, out _), "concurrent ticket creation failed");

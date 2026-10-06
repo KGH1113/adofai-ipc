@@ -1,473 +1,274 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AdofaiIpc;
-using AdofaiIpc.Unity;
-using Newtonsoft.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace AdofaiIpc.Core;
 
 public sealed class IpcRegistry
 {
   private readonly object _sync = new object();
-  private readonly Dictionary<string, RegisteredNamespace> _namespaces =
-    new Dictionary<string, RegisteredNamespace>();
-  private readonly IpcDownloadTicketStore _downloadTickets = new IpcDownloadTicketStore();
+  private readonly Dictionary<string, Entry> _namespaces = new Dictionary<string, Entry>();
+  private readonly Dictionary<string, Peer> _peers = new Dictionary<string, Peer>();
+  private readonly IpcDownloadTicketStore _tickets = new IpcDownloadTicketStore();
+  private readonly Action<Action> _dispatchMainThread;
+  private readonly SemaphoreSlim _commandSlots = new SemaphoreSlim(256, 256);
+  public string DownloadBaseUrl { get; set; }
+
+  public IpcRegistry(Action<Action> dispatchMainThread) { _dispatchMainThread = dispatchMainThread ?? throw new ArgumentNullException(nameof(dispatchMainThread)); }
 
   public AdofaiIpcNamespace RegisterNamespace(string name, IpcNamespaceInfo info)
   {
-    if (!IpcNameValidator.IsValidNamespace(name))
-    {
-      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
-    }
-
-    lock (_sync)
-    {
-      info ??= new IpcNamespaceInfo();
-      if (string.IsNullOrEmpty(info.DisplayName)) info.DisplayName = name;
-      if (string.IsNullOrEmpty(info.Version)) info.Version = "0.0.0";
-
-      if (_namespaces.TryGetValue(name, out RegisteredNamespace registered))
-      {
-        _downloadTickets.RevokeNamespace(name);
-        registered.Info = info;
-        registered.Status = IpcNamespaceStatus.Initializing;
-        registered.Error = null;
-      }
-      else
-      {
-        registered = new RegisteredNamespace(name, info);
-        _namespaces.Add(name, registered);
-      }
-
-      return new AdofaiIpcNamespace(this, name, info);
-    }
+    if (!IpcNameValidator.IsValidNamespace(name)) throw new ArgumentException("Invalid namespace.", nameof(name));
+    UnregisterNamespace(name);
+    info ??= new IpcNamespaceInfo();
+    if (string.IsNullOrEmpty(info.DisplayName)) info.DisplayName = name;
+    if (string.IsNullOrEmpty(info.Version)) info.Version = "0.0.0";
+    var handle = new AdofaiIpcNamespace(this, name, info);
+    Peer[] peers;
+    lock (_sync) { _namespaces.Add(name, new Entry(handle)); peers = SubscribersLocked(name); }
+    NotifyState(handle, peers);
+    return handle;
   }
 
   public bool UnregisterNamespace(string name)
   {
-    if (!IpcNameValidator.IsValidNamespace(name))
-    {
-      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
-    }
-
+    Entry entry; Peer[] peers;
     lock (_sync)
     {
-      bool removed = _namespaces.Remove(name);
-      if (removed) _downloadTickets.RevokeNamespace(name);
-      return removed;
+      if (!_namespaces.TryGetValue(name, out entry)) return false;
+      _namespaces.Remove(name); peers = SubscribersLocked(name);
     }
-  }
-
-  public void RegisterMethod(
-    string namespaceName,
-    string method,
-    Func<IpcRequest, object> handler,
-    bool requiresMainThread)
-  {
-    RegisterMethod(namespaceName, method, handler, requiresMainThread, false);
-  }
-
-  internal void RegisterDownloadMethod(
-    string namespaceName,
-    string method,
-    Func<IpcRequest, object> handler,
-    bool requiresMainThread)
-  {
-    RegisterMethod(namespaceName, method, handler, requiresMainThread, true);
-  }
-
-  private void RegisterMethod(
-    string namespaceName,
-    string method,
-    Func<IpcRequest, object> handler,
-    bool requiresMainThread,
-    bool isDownload)
-  {
-    if (!IpcNameValidator.IsValidMethod(method))
+    entry.Handle.Lifetime.Cancel(); _tickets.RevokeNamespace(name);
+    foreach (Peer peer in peers)
     {
-      throw new ArgumentException("Invalid IPC method: " + method, nameof(method));
+      peer.Transport.Send(IpcPeerMessage.Create("namespace", name, "namespace.changed", new { status = "unavailable" }));
+      Safe(() => entry.Handle.NotifyDisconnected(peer.Transport.Info));
     }
-
-    lock (_sync)
-    {
-      if (!_namespaces.TryGetValue(namespaceName, out RegisteredNamespace registered))
-      {
-        throw new InvalidOperationException("IPC namespace is not registered: " + namespaceName);
-      }
-
-      registered.Methods[method] = new IpcHandler(handler, requiresMainThread, isDownload);
-    }
-  }
-
-  public bool UnregisterMethod(string namespaceName, string method)
-  {
-    if (!IpcNameValidator.IsValidNamespace(namespaceName))
-    {
-      throw new ArgumentException("Invalid IPC namespace: " + namespaceName, nameof(namespaceName));
-    }
-
-    if (!IpcNameValidator.IsValidMethod(method))
-    {
-      throw new ArgumentException("Invalid IPC method: " + method, nameof(method));
-    }
-
-    lock (_sync)
-    {
-      if (!_namespaces.TryGetValue(namespaceName, out RegisteredNamespace registered))
-      {
-        return false;
-      }
-
-      return registered.Methods.Remove(method);
-    }
-  }
-
-  public void SetNamespaceInitializing(string name)
-  {
-    SetNamespaceStatus(name, IpcNamespaceStatus.Initializing, null);
+    return true;
   }
 
   public IpcNamespaceStatus GetNamespaceStatus(string name)
+  { lock (_sync) return _namespaces.TryGetValue(name, out Entry e) ? e.Status : throw new InvalidOperationException("Namespace unavailable."); }
+
+  internal void RegisterCommand(AdofaiIpcNamespace handle, string name, Func<IpcCommand, Task> action, bool mainThread)
   {
-    if (!IpcNameValidator.IsValidNamespace(name))
-    {
-      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
-    }
+    if (!IpcNameValidator.IsValidMethod(name)) throw new ArgumentException("Invalid command.", nameof(name));
+    if (action == null) throw new ArgumentNullException(nameof(action));
+    lock (_sync) RequireCurrent(handle).Commands[name] = new Handler(action, mainThread);
+  }
+  internal bool UnregisterCommand(AdofaiIpcNamespace handle, string name)
+  { lock (_sync) return RequireCurrent(handle).Commands.Remove(name); }
 
-    lock (_sync)
-    {
-      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered))
-      {
-        throw new InvalidOperationException("IPC namespace is not registered: " + name);
-      }
-
-      return registered.Status;
-    }
+  internal void SetStatus(AdofaiIpcNamespace handle, IpcNamespaceStatus status, string code, string message)
+  {
+    Peer[] peers;
+    lock (_sync) { Entry e = RequireCurrent(handle); e.Status = status; e.ErrorCode = code; e.ErrorMessage = message; peers = SubscribersLocked(handle.Name); }
+    NotifyState(handle, peers);
+    if (status == IpcNamespaceStatus.Ready)
+      foreach (Peer peer in peers) if (IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) Safe(() => handle.NotifySubscribed(peer.Transport.Info));
   }
 
-  public void SetNamespaceReady(string name)
-  {
-    SetNamespaceStatus(name, IpcNamespaceStatus.Ready, null);
-  }
-
-  public void SetNamespaceError(string name, string code, string message)
-  {
-    if (string.IsNullOrWhiteSpace(code))
-    {
-      throw new ArgumentException("Namespace error code is required.", nameof(code));
-    }
-
-    if (string.IsNullOrWhiteSpace(message))
-    {
-      throw new ArgumentException("Namespace error message is required.", nameof(message));
-    }
-
-    SetNamespaceStatus(
-      name,
-      IpcNamespaceStatus.Error,
-      new NamespaceErrorInfo { Code = code, Message = message });
-  }
-
-  public IpcResponse Invoke(IpcRequest request)
-  {
-    if (request == null)
-    {
-      return IpcResponse.Fail(null, IpcErrorCodes.InvalidRequest, "Request body is required.");
-    }
-
-    if (!IpcNameValidator.IsValidNamespace(request.Namespace))
-    {
-      return IpcResponse.Fail(
-        request.Id,
-        IpcErrorCodes.InvalidNamespace,
-        "Namespace is missing or invalid.");
-    }
-
-    if (!IpcNameValidator.IsValidMethod(request.Method))
-    {
-      return IpcResponse.Fail(
-        request.Id,
-        IpcErrorCodes.InvalidMethod,
-        "Method is missing or invalid.");
-    }
-
-    IpcHandler handler;
-
-    lock (_sync)
-    {
-      if (!_namespaces.TryGetValue(request.Namespace, out RegisteredNamespace registered))
-      {
-        return IpcResponse.Fail(
-          request.Id,
-          IpcErrorCodes.NamespaceNotFound,
-          "Namespace not found: " + request.Namespace);
-      }
-
-      if (registered.Status == IpcNamespaceStatus.Initializing)
-      {
-        return IpcResponse.Fail(
-          request.Id,
-          IpcErrorCodes.NamespaceInitializing,
-          "Namespace is initializing: " + request.Namespace);
-      }
-
-      if (registered.Status == IpcNamespaceStatus.Error)
-      {
-        string message = registered.Error?.Message ?? "Namespace initialization failed.";
-        return IpcResponse.Fail(
-          request.Id,
-          IpcErrorCodes.NamespaceError,
-          message);
-      }
-
-      if (!registered.Methods.TryGetValue(request.Method, out handler))
-      {
-        return IpcResponse.Fail(
-          request.Id,
-          IpcErrorCodes.HandlerNotFound,
-          "No handler registered for " + request.Namespace + ":" + request.Method);
-      }
-    }
-
-    try
-    {
-      object result = handler.RequiresMainThread
-        ? MainThreadInvoker.Invoke(() => handler.Invoke(request))
-        : handler.Invoke(request);
-
-      if (handler.IsDownload)
-      {
-        if (result is IpcDownloadError downloadError)
-        {
-          return IpcResponse.Fail(
-            request.Id,
-            downloadError.Code,
-            downloadError.Message,
-            downloadError.StatusCode);
-        }
-
-        if (!(result is IpcDownloadSource))
-        {
-          return IpcResponse.Fail(
-            request.Id,
-            IpcErrorCodes.DownloadInvalidResult,
-            "Download handler must return IpcDownloadSource or IpcDownloadError.",
-            500);
-        }
-      }
-
-      return IpcResponse.Success(request.Id, result, handler.IsDownload);
-    }
-    catch (TimeoutException e)
-    {
-      Main.Instance?.LogException(e);
-      return IpcResponse.Fail(
-        request.Id,
-        IpcErrorCodes.HandlerFailed,
-        "Handler timed out: " + request.Namespace + ":" + request.Method);
-    }
-    catch (Exception e)
-    {
-      Main.Instance?.LogException(e);
-      return IpcResponse.Fail(
-        request.Id,
-        IpcErrorCodes.HandlerFailed,
-        "Handler failed: " + request.Namespace + ":" + request.Method);
-    }
-  }
-
-  public List<NamespaceSummary> ListNamespaces()
+  internal bool Attach(IIpcPeer transport)
   {
     lock (_sync)
     {
-      return _namespaces.Values
-        .OrderBy(item => item.Name)
-        .Select(item => new NamespaceSummary
-        {
-          Name = item.Name,
-          DisplayName = item.Info.DisplayName,
-          Version = item.Info.Version,
-          Status = GetStatusName(item.Status)
-        })
-        .ToList();
+      if (_peers.Count >= 64) return false;
+      _peers.Add(transport.Info.PeerId, new Peer(transport));
     }
+    transport.Send(IpcPeerMessage.Create("welcome", null, "connection.welcome", new {
+      server = "AdofaiIpc", serverVersion = IpcProtocol.ProductVersion, protocolVersion = IpcProtocol.Version,
+      peerId = transport.Info.PeerId, connectionId = transport.Info.ConnectionId }));
+    return true;
   }
 
-  public NamespaceDetail GetNamespace(string name)
+  internal void Detach(IIpcPeer transport)
   {
+    AdofaiIpcNamespace[] handles;
     lock (_sync)
     {
-      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered)) return null;
-
-      return new NamespaceDetail
-      {
-        Namespace = registered.Name,
-        DisplayName = registered.Info.DisplayName,
-        Version = registered.Info.Version,
-        Status = GetStatusName(registered.Status),
-        Error = registered.Error,
-        Methods = registered.Methods.Keys.OrderBy(method => method).ToList()
-      };
+      if (!_peers.TryGetValue(transport.Info.PeerId, out Peer peer)) return;
+      _peers.Remove(transport.Info.PeerId);
+      handles = peer.Subscriptions.Where(name => _namespaces.ContainsKey(name)).Select(name => _namespaces[name].Handle).ToArray();
     }
+    foreach (var handle in handles) Safe(() => handle.NotifyDisconnected(transport.Info));
   }
 
-  public IpcNamespaceInfo GetNamespaceInfo(string name)
+  internal void Receive(IIpcPeer transport, IpcPeerMessage message)
   {
+    if (message == null) { transport.Close(); return; }
+    Peer peer;
+    lock (_sync) { if (!_peers.TryGetValue(transport.Info.PeerId, out peer)) return; peer.LastSeen = DateTime.UtcNow; }
+    if (message.Kind == "pong") return;
+    if (message.Kind == "ping") { transport.Send(IpcPeerMessage.Create("pong", null, "connection.pong", null, message.Id)); return; }
+    if (message.Kind == "hello")
+    { if ((int?)message.Payload?["protocolVersion"] != IpcProtocol.Version) transport.Close(); return; }
+    if (!IpcNameValidator.IsValidNamespace(message.Namespace)) { Reject(transport, message, "invalid_namespace", "A valid namespace is required."); return; }
+    if (message.Kind == "subscribe") { Subscribe(peer, message.Namespace, message.Id); return; }
+    if (message.Kind == "unsubscribe") { Unsubscribe(peer, message.Namespace); return; }
+    Entry entry;
     lock (_sync)
     {
-      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered))
-      {
-        return null;
-      }
-
-      return registered.Info;
+      _namespaces.TryGetValue(message.Namespace, out entry);
+      if (!peer.Subscriptions.Contains(message.Namespace)) entry = null;
     }
-  }
-
-  internal bool TryCreateDownloadTicket(
-    string namespaceName,
-    IpcDownloadSource source,
-    out string token,
-    out string errorCode,
-    out string errorMessage)
-  {
-    token = null;
-    errorCode = null;
-    errorMessage = null;
-
+    if (entry == null) { Reject(transport, message, "namespace_unavailable", "Subscribe to an available namespace first."); return; }
+    if (!IsOriginAllowed(entry.Handle.Info, transport.Info.Origin)) { Reject(transport, message, "origin_not_allowed", "This application cannot access the namespace."); return; }
+    if (!IpcNameValidator.IsValidMethod(message.Name) || string.IsNullOrEmpty(message.Id) || message.Id.Length > 128)
+    { Reject(transport, message, "invalid_message", "A valid message name and id are required."); return; }
+    if (message.Kind == "event")
+    {
+      Safe(() => entry.Handle.NotifyEvent(new IpcPeerEvent { PeerId = transport.Info.PeerId, ConnectionId = transport.Info.ConnectionId,
+        Name = message.Name, Id = message.Id, CorrelationId = message.CorrelationId, Payload = message.Payload ?? new JObject() }));
+      return;
+    }
+    if (message.Kind != "command") { Reject(transport, message, "invalid_message", "Unsupported message kind."); return; }
+    Handler handler;
     lock (_sync)
     {
-      if (!_namespaces.TryGetValue(namespaceName, out RegisteredNamespace registered))
-      {
-        errorCode = IpcErrorCodes.NamespaceNotFound;
-        errorMessage = "Namespace not found: " + namespaceName;
-        return false;
-      }
-
-      if (registered.Status != IpcNamespaceStatus.Ready)
-      {
-        errorCode = registered.Status == IpcNamespaceStatus.Initializing
-          ? IpcErrorCodes.NamespaceInitializing
-          : IpcErrorCodes.NamespaceError;
-        errorMessage = "Namespace is not ready: " + namespaceName;
-        return false;
-      }
-
-      return _downloadTickets.TryCreate(
-        namespaceName,
-        source,
-        registered.Info.AllowedOrigins,
-        out token,
-        out errorCode,
-        out errorMessage);
+      if (entry.Status != IpcNamespaceStatus.Ready) handler = null;
+      else entry.Commands.TryGetValue(message.Name, out handler);
     }
-  }
-
-  internal bool TryTakeDownloadTicket(
-    string token,
-    string origin,
-    out IpcDownloadSource source,
-    out string errorCode,
-    out string errorMessage)
-  {
+    if (entry.Status != IpcNamespaceStatus.Ready) { Reject(transport, message, "namespace_" + StatusName(entry.Status), entry.ErrorMessage ?? "The mod is not ready."); return; }
+    if (handler == null) { Reject(transport, message, "command_not_found", "The mod does not support this command."); return; }
+    if (message.Payload != null && !(message.Payload is JObject)) { Reject(transport, message, "invalid_payload", "Command payload must be an object."); return; }
     lock (_sync)
     {
-      return _downloadTickets.TryTake(
-        token,
-        origin,
-        out source,
-        out errorCode,
-        out errorMessage);
+      // Duplicate command ids never repeat side effects on the same connection.
+      if (!_commandSlots.Wait(0)) { Reject(transport, message, "busy", "The game is handling too many commands. Try again."); return; }
+      if (!peer.Remember(message.Id)) { _commandSlots.Release(); Reject(transport, message, "duplicate_command", "This command was already accepted."); return; }
     }
-  }
-
-  internal void ClearDownloadTickets()
-  {
-    _downloadTickets.Clear();
-  }
-
-  private void SetNamespaceStatus(
-    string name,
-    IpcNamespaceStatus status,
-    NamespaceErrorInfo error)
-  {
-    if (!IpcNameValidator.IsValidNamespace(name))
-    {
-      throw new ArgumentException("Invalid IPC namespace: " + name, nameof(name));
-    }
-
-    lock (_sync)
-    {
-      if (!_namespaces.TryGetValue(name, out RegisteredNamespace registered))
-      {
-        throw new InvalidOperationException("IPC namespace is not registered: " + name);
-      }
-
-      registered.Status = status;
-      registered.Error = error;
-    }
-  }
-
-  private static string GetStatusName(IpcNamespaceStatus status)
-  {
-    return status switch
-    {
-      IpcNamespaceStatus.Initializing => "initializing",
-      IpcNamespaceStatus.Ready => "ready",
-      IpcNamespaceStatus.Error => "error",
-      _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    var linked = CancellationTokenSource.CreateLinkedTokenSource(transport.CancellationToken, entry.Handle.Lifetime.Token);
+    var command = new IpcCommand(transport, message, linked.Token);
+    transport.Send(IpcPeerMessage.Create("accepted", message.Namespace, "command.accepted", new { }, message.Id));
+    Func<Task> execute = async () => {
+      try { if (!linked.IsCancellationRequested) await handler.Action(command).ConfigureAwait(false); }
+      catch (OperationCanceledException) { }
+      catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); command.Fail("handler_failed", "The mod could not complete the command."); }
+      finally { linked.Dispose(); _commandSlots.Release(); }
     };
+    if (handler.MainThread)
+    {
+      try { _dispatchMainThread(() => { _ = execute(); }); }
+      catch { linked.Dispose(); _commandSlots.Release(); command.Fail("unavailable", "The game is shutting down."); }
+    }
+    else _ = Task.Run(execute);
   }
 
-  private sealed class RegisteredNamespace
+  private void Subscribe(Peer peer, string name, string correlationId)
   {
-    public readonly string Name;
-    public IpcNamespaceInfo Info;
-    public IpcNamespaceStatus Status = IpcNamespaceStatus.Initializing;
-    public NamespaceErrorInfo Error;
-    public readonly Dictionary<string, IpcHandler> Methods = new Dictionary<string, IpcHandler>();
-
-    public RegisteredNamespace(string name, IpcNamespaceInfo info)
+    Entry entry;
+    lock (_sync)
     {
-      Name = name;
-      Info = info;
+      _namespaces.TryGetValue(name, out entry);
+      if (entry != null && !IsOriginAllowed(entry.Handle.Info, peer.Transport.Info.Origin))
+      { Reject(peer.Transport, IpcPeerMessage.Create("subscribe", name, null, null, id: correlationId), "origin_not_allowed", "This application cannot access the namespace."); return; }
+      if (peer.Subscriptions.Count >= 64 && !peer.Subscriptions.Contains(name)) return;
+      peer.Subscriptions.Add(name);
+    }
+    peer.Transport.Send(IpcPeerMessage.Create("subscribed", name, "namespace.subscribed", new { }, correlationId));
+    peer.Transport.Send(StateMessage(name, entry));
+    if (entry?.Status == IpcNamespaceStatus.Ready) Safe(() => entry.Handle.NotifySubscribed(peer.Transport.Info));
+  }
+
+  private void Unsubscribe(Peer peer, string name)
+  {
+    Entry entry;
+    lock (_sync) { if (!peer.Subscriptions.Remove(name)) return; _namespaces.TryGetValue(name, out entry); }
+    if (entry != null) Safe(() => entry.Handle.NotifyDisconnected(peer.Transport.Info));
+  }
+
+  internal void Publish(AdofaiIpcNamespace handle, string name, object payload)
+  {
+    Peer[] peers; lock (_sync) { RequireCurrent(handle); peers = SubscribersLocked(handle.Name); }
+    var message = IpcPeerMessage.Create("event", handle.Name, name, payload);
+    foreach (Peer peer in peers) if (IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) peer.Transport.Send(message);
+  }
+
+  internal string SendToPeer(AdofaiIpcNamespace handle, string peerId, string kind, string name, object payload, string correlationId)
+  {
+    Peer peer;
+    lock (_sync)
+    {
+      RequireCurrent(handle);
+      if (!_peers.TryGetValue(peerId, out peer) || !peer.Subscriptions.Contains(handle.Name)) throw new InvalidOperationException("The peer is disconnected or not subscribed.");
+    }
+    if (!IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) throw new InvalidOperationException("The peer cannot access this namespace.");
+    var message = IpcPeerMessage.Create(kind, handle.Name, name, payload, correlationId); peer.Transport.Send(message); return message.Id;
+  }
+
+  internal void CreateDownload(AdofaiIpcNamespace handle, IpcCommand command, object result)
+  {
+    if (command.IsRejected || command.CancellationToken.IsCancellationRequested) { (result as IDisposable)?.Dispose(); return; }
+    if (result is IpcDownloadError error) { command.Reject(error.Code, error.Message); return; }
+    if (!(result is IpcDownloadSource source)) { command.Reject("download_invalid_result", "The mod could not prepare the file."); return; }
+    if (string.IsNullOrEmpty(DownloadBaseUrl)) { source.Dispose(); command.Reject("unavailable", "The download server is unavailable."); return; }
+    if (!_tickets.TryCreate(handle.Name, source, handle.Info.AllowedOrigins, out string token, out string code, out string reason))
+    { source.Dispose(); command.Reject(code, reason); return; }
+    command.Reply("download.ready", new { url = DownloadBaseUrl.TrimEnd('/') + "/ipc/download/" + token, byteLength = source.ByteLength });
+  }
+  internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string code, out string reason)
+    => _tickets.TryTake(token, origin, out source, out code, out reason);
+  internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string approvedBrowserOrigin, out string code, out string reason)
+    => _tickets.TryTake(token, origin, out source, out approvedBrowserOrigin, out code, out reason);
+  internal void ClearDownloadTickets() => _tickets.Clear();
+
+  internal void Heartbeat()
+  {
+    Peer[] peers; lock (_sync) peers = _peers.Values.ToArray();
+    foreach (Peer peer in peers)
+    {
+      if (DateTime.UtcNow - peer.LastSeen > TimeSpan.FromSeconds(45)) peer.Transport.Close();
+      else peer.Transport.Send(IpcPeerMessage.Create("ping", null, "connection.ping", null));
     }
   }
-
-  public sealed class NamespaceSummary
+  private Entry RequireCurrent(AdofaiIpcNamespace handle)
+  { if (!_namespaces.TryGetValue(handle.Name, out Entry e) || !ReferenceEquals(e.Handle, handle)) throw new InvalidOperationException("Namespace has been unloaded."); return e; }
+  private Peer[] SubscribersLocked(string name) => _peers.Values.Where(peer => peer.Subscriptions.Contains(name)).ToArray();
+  private void NotifyState(AdofaiIpcNamespace handle, Peer[] peers)
   {
-    [JsonProperty("name")]
-    public string Name;
-    [JsonProperty("displayName")]
-    public string DisplayName;
-    [JsonProperty("version")]
-    public string Version;
-    [JsonProperty("status")]
-    public string Status;
+    Entry entry; lock (_sync) _namespaces.TryGetValue(handle.Name, out entry);
+    var message = StateMessage(handle.Name, entry);
+    foreach (var peer in peers) if (IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) peer.Transport.Send(message);
   }
-
-  public sealed class NamespaceDetail
+  private static IpcPeerMessage StateMessage(string name, Entry e) => IpcPeerMessage.Create("namespace", name, "namespace.changed", new {
+    status = e == null ? "unavailable" : StatusName(e.Status), version = e?.Handle.Info.Version,
+    error = e?.ErrorCode == null ? null : new { code = e.ErrorCode, message = e.ErrorMessage } });
+  private static string StatusName(IpcNamespaceStatus value) => value == IpcNamespaceStatus.Ready ? "ready" : value == IpcNamespaceStatus.Error ? "error" : "initializing";
+  private static void Reject(IIpcPeer peer, IpcPeerMessage message, string code, string reason)
+    => peer.Send(IpcPeerMessage.Create("rejected", message.Namespace, "command.rejected", new { code, message = reason }, message.Id));
+  private static void Safe(Action action) { try { action(); } catch (Exception e) { System.Diagnostics.Trace.TraceError(e.ToString()); } }
+  private static bool IsOriginAllowed(IpcNamespaceInfo info, string origin)
   {
-    [JsonProperty("namespace")]
-    public string Namespace;
-    [JsonProperty("displayName")]
-    public string DisplayName;
-    [JsonProperty("version")]
-    public string Version;
-    [JsonProperty("status")]
-    public string Status;
-    [JsonProperty("error")]
-    public NamespaceErrorInfo Error;
-    [JsonProperty("methods")]
-    public List<string> Methods;
+    if (string.IsNullOrEmpty(origin) || info.AllowedOrigins == null || info.AllowedOrigins.Length == 0) return true;
+    foreach (string allowed in info.AllowedOrigins)
+    {
+      if (string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase)) return true;
+      if (Uri.TryCreate(allowed, UriKind.Absolute, out Uri a) && Uri.TryCreate(origin, UriKind.Absolute, out Uri o)
+        && a.IsDefaultPort && a.Scheme == o.Scheme && a.Host == o.Host) return true;
+    }
+    return false;
   }
-
-  public sealed class NamespaceErrorInfo
+  private sealed class Entry
   {
-    [JsonProperty("code")]
-    public string Code;
-    [JsonProperty("message")]
-    public string Message;
+    internal readonly AdofaiIpcNamespace Handle;
+    internal readonly Dictionary<string, Handler> Commands = new Dictionary<string, Handler>();
+    internal IpcNamespaceStatus Status = IpcNamespaceStatus.Initializing;
+    internal string ErrorCode, ErrorMessage;
+    internal Entry(AdofaiIpcNamespace handle) { Handle = handle; }
+  }
+  private sealed class Handler
+  { internal readonly Func<IpcCommand, Task> Action; internal readonly bool MainThread; internal Handler(Func<IpcCommand, Task> action, bool mainThread) { Action = action; MainThread = mainThread; } }
+  private sealed class Peer
+  {
+    internal readonly IIpcPeer Transport;
+    internal readonly HashSet<string> Subscriptions = new HashSet<string>();
+    private readonly HashSet<string> _ids = new HashSet<string>();
+    private readonly Queue<string> _order = new Queue<string>();
+    internal DateTime LastSeen = DateTime.UtcNow;
+    internal Peer(IIpcPeer transport) { Transport = transport; }
+    internal bool Remember(string id) { if (!_ids.Add(id)) return false; _order.Enqueue(id); if (_order.Count > 1024) _ids.Remove(_order.Dequeue()); return true; }
   }
 }

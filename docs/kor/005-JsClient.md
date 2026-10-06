@@ -1,126 +1,59 @@
-# AdofaiIpc 개발 가이드 - JavaScript/TypeScript Client
+# TypeScript SDK
 
-## [목차로 이동](000-DevelopGuide.md)
+[목차](000-DevelopGuide.md) | [English](../en/005-JsClient.md)
 
-1. [패키지 위치](#1-%ED%8C%A8%ED%82%A4%EC%A7%80-%EC%9C%84%EC%B9%98)
-2. [포트 자동 탐색](#2-%ED%8F%AC%ED%8A%B8-%EC%9E%90%EB%8F%99-%ED%83%90%EC%83%89)
-3. [Namespace 호출](#3-namespace-%ED%98%B8%EC%B6%9C)
-4. [빌드](#4-%EB%B9%8C%EB%93%9C)
-
----
-
-## 1. 패키지 위치
-
-JavaScript/TypeScript client는 monorepo 안의 `packages/client`에 있습니다.
-
-```text
-packages/client
-```
-
-패키지 이름은 `@adofai-ipc/client`입니다.
-
----
-
-## 2. 포트 자동 탐색
-
-AdofaiIpc는 기본 포트 `32145`에서 시작하고, 포트가 사용 중이면 `32155`까지 fallback을
-시도합니다.
-
-client에서는 `tryConnect`로 실행 중인 AdofaiIpc listener를 찾을 수 있습니다.
-
-```ts
-import { tryConnect } from "@adofai-ipc/client";
-
-const client = await tryConnect({
-  probeTimeoutMs: 500,
-  requestTimeoutMs: 10_000
-});
-```
-
-각 포트의 연결 실패는 탐색 과정에서 무시됩니다. 모든 후보 포트가 실패하면
-`tryConnect`는 code가 `UNAVAILABLE`인 `IpcConnectionError`를 던집니다.
-
-`tryConnect` 성공은 AdofaiIpc listener가 실행 중이라는 것만 보장합니다. 대상 namespace가
-등록되었거나 해당 모드의 초기화가 끝났다는 의미는 아닙니다. 기존 `timeoutMs` option은
-두 timeout을 함께 설정하는 deprecated alias로 유지됩니다.
-
----
-
-## 3. Namespace 호출
-
-직접 `namespace`와 `method`를 넘겨 호출할 수 있습니다.
-
-```ts
-const result = await client.call({
-  namespace: "tufhelper2",
-  method: "level.open-from-id",
-  params: {
-    id: "1234"
-  },
-  timeoutMs: 30_000
-});
-```
-
-namespace client를 만들어서 사용할 수도 있습니다.
-
-```ts
-const tufhelper = client.namespace("tufhelper2");
-
-await tufhelper.call("level.open-from-id", {
-  id: "1234"
-});
-```
-
-namespace가 아직 등록 중일 수 있으면 listener 탐색과 별도로 기다릴 수 있습니다.
-
-```ts
-await client.waitForNamespace("tufhelper2", {
-  status: "ready",
-  timeoutMs: 15_000,
-  pollIntervalMs: 100
-});
-```
-
-namespace는 등록 직후 `initializing` 상태가 됩니다. namespace를 소유한 모드가 명시적으로
-`ready` 또는 `error`로 전환해야 하며, AdofaiIpc는 `ready`가 되기 전까지 method 호출을
-차단합니다. ready 대기 만료는 `namespace_initializing`, 초기화 실패는 `namespace_error`로
-구분됩니다.
-
-연결 실패는 `IpcConnectionError`로 전달됩니다. 설정한 제한 시간을 넘긴 요청은
-`IpcConnectionError`를 상속하고 code가 `TIMEOUT`인 `IpcTimeoutError`를 던집니다.
-`namespace_not_found`, `namespace_initializing`, `namespace_error`를 포함한 protocol 오류는
-`IpcResponseError`로 전달됩니다.
-`isIpcUnavailable`은 code가 `UNAVAILABLE`인 연결 오류만 판별하며 timeout은 포함하지 않습니다.
-
-```ts
-import {
-  IpcTimeoutError,
-  isIpcUnavailable
-} from "@adofai-ipc/client";
-
-try {
-  await client.health();
-} catch (error) {
-  if (error instanceof IpcTimeoutError) {
-    console.warn(`AdofaiIpc 요청이 ${error.timeoutMs}ms 후 timeout되었습니다.`);
-  } else if (isIpcUnavailable(error)) {
-    console.warn("AdofaiIpc에 연결할 수 없습니다.");
-  }
-}
-```
-
----
-
-## 4. 빌드
-
-root workspace에서 client 패키지만 빌드합니다.
+v1 준비 중에는 npm 패키지 없이 원본 소스를 소비합니다.
 
 ```bash
-pnpm --filter @adofai-ipc/client build
+./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc
 ```
 
-전체 TypeScript workspace를 확인하려면 다음 명령을 사용합니다.
+생성한 src, LICENSE, README.md, source.json을 소비 프로젝트에 커밋합니다. source.json은 upstream
+commit, 수정 여부, SDK/wire version, 파일별 SHA-256을 기록합니다. 원본 수정 후 다시 생성하세요.
+절대 경로 의존성과 수동 transport 복사를 피하고 Vite/TS alias를 raw source에 연결합니다.
+registry dependency를 제거하고 lockfile도 갱신합니다. tsup 전용 버전 치환은 필요 없습니다.
 
-```bash
-pnpm check
+```ts
+import { IpcConnection } from "./vendor/adofai-ipc/src";
+
+// Register listeners before connecting so the initial snapshot cannot be lost.
+const connection = new IpcConnection();
+const channel = connection.namespace("example-mod");
+channel.on<{ revision: number }>("library.snapshot", snapshot => projectLibrary(snapshot));
+channel.on<{ revision: number }>("library.changed", change => projectLibrary(change));
+channel.on("level.opened", (payload, message) => applyOpenedLevel(payload, message.correlationId));
+channel.on("command.rejected", (error, message) => showFailure(error, message.correlationId));
+await connection.start();
+await channel.whenReady({ timeoutMs: 15_000 });
+const commandId = channel.send("level.open", { levelId: "abc" });
+
+channel.onCommand("render.frame", (frame, message) => {
+    // Perform the domain operation; report its actual completion.
+    channel.reply(message.id, "render.frame.ready", { path: "/tmp/frame.png" });
+});
+// On application shutdown:
+connection.close();
 ```
+
+connectIpc(options)는 연결을 시작합니다. new IpcConnection(options)는 listener를 먼저 설치하기
+위해 시작을 분리합니다. 기본 host127.0.0.1, port32145..32155, 포트별 timeout1500ms입니다.
+transportFactory와 onProtocolMismatch를 주입할 수 있습니다. browser는 global WebSocket을
+사용하고 native나 WebSocket 없는 Node 환경은 adapter를 주입합니다.
+
+IpcTransport port는 connect, send, close, onMessage, onClose를 제공합니다. send/close는
+비동기여도 됩니다. 메시지는 UTF-8 JSON 문자열이며 전달받은 subprotocol을 지원해야 합니다.
+실패한 probe의 소켓과 listener는 정리합니다.
+
+connection: namespace, onState, state, peerId, connectionId, close.
+state는 disconnected/connected/reconnecting/closed/incompatible이며 onState는 현재 값을
+즉시 알립니다. 성립된 연결은 jitter/backoff로 복구하고 재구독하지만 명령을 재전송하지 않습니다.
+
+channel: on, onCommand, send, emit, reply, onStatus, status, error, whenReady.
+send(name,payload,{id,signal})는 ID를 즉시 반환합니다. AbortSignal은 전송 전에만 검사합니다.
+이미 실행 중인 작업은 도메인 취소 명령으로 취소하세요. on/onCommand/onStatus의 반환 함수로
+listener를 해제합니다. 상관관계, 도메인 timeout, 연결 종료 시 작업 실패, projection은 앱이 맡습니다.
+
+최초 부재는 IpcUnavailableError(UNAVAILABLE), wire 불일치는 IpcProtocolMismatchError(INCOMPATIBLE).
+whenReady는 polling 없이 상태 이벤트를 기다리며 기본15000ms 후 IpcTimeoutError(TIMEOUT),
+초기화 실패 시 모드 code를 가진 IpcNamespaceError를 반환합니다. isIpcUnavailable은 UNAVAILABLE만
+식별합니다. 최초 서버 발견 전의 재시도는 앱 supervisor, 성공 후 연결 복구는 SDK가 담당합니다.

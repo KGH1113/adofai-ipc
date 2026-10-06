@@ -1,67 +1,22 @@
-# AdofaiIpc Developer Guide - Getting Started
+# Getting started
 
-[Guide index](000-DevelopGuide.md) | [Korean](../kor/001-GettingStarted.md)
+[Guide](000-DevelopGuide.md) | [한국어](../kor/001-GettingStarted.md)
 
-1. [What is AdofaiIpc?](#1-what-is-adofaiipc)
-2. [Runtime requirements](#2-runtime-requirements)
-3. [Port policy](#3-port-policy)
-4. [Health check](#4-health-check)
+The runtime requires ADOFAI and UnityModManager. It targets netstandard2.1 and embeds an
+isolated managed WebSocket implementation. The game's Mono HttpListener WebSocket upgrade
+API is not used because its implementation throws NotImplementedException.
 
----
+During v1 preparation, build the local source with `./scripts/run.sh build`. This validates
+assemblies and tests, then installs under the configured `Mods/AdofaiIpc` directory. Set
+`ADOFAIIPC_SKIP_INSTALL=1` to validate without installing. `./scripts/run.sh package` produces
+and verifies the mod ZIP and checksum. These commands do not publish a release.
 
-## 1. What is AdofaiIpc?
+The server binds IPv4 loopback only. It tries ports 32145 through 32155. Connect to
+`ws://127.0.0.1:<port>/ipc/ws` with subprotocol `adofai-ipc.v3`. The SDK scans those WebSocket
+ports directly and validates the welcome message. `GET /ipc/health` remains a diagnostic
+endpoint and returns server, serverVersion, protocolVersion and port.
 
-AdofaiIpc is a local IPC gateway between ADOFAI mods and external clients.
-
-Browser userscripts, web UIs, CLIs, and development tools send HTTP requests to AdofaiIpc.
-AdofaiIpc routes each request to a mod handler using the request's `namespace` and `method`.
-
-Mod developers only register methods through the public API. Individual mods do not need to
-create their own `HttpListener`.
-
----
-
-## 2. Runtime requirements
-
-AdofaiIpc runs directly through UnityModManager without another framework mod.
-
-Required components:
-
-- A Dance of Fire and Ice
-- UnityModManager
-- AdofaiIpc installed at `Mods/AdofaiIpc`
-
-Mods that use the public API must reference the versioned `AdofaiIpc.dll` build artifact.
-Mods using the dependency shim can install the latest package from GitHub Releases when
-AdofaiIpc is missing. Dependency errors are aggregated into one in-game dialog. The bridge
-releases migrate existing dependent mods automatically; existing AdofaiIpc 0.2.0 users reinstall
-only AdofaiIpc once.
-
----
-
-## 3. Port policy
-
-AdofaiIpc first attempts to listen at:
-
-```text
-http://127.0.0.1:32145/
-```
-
-If the port is unavailable, it tries each port from `32146` through `32155` until it finds an
-available port.
-
-Clients should probe `/ipc/health` from `32145` upward instead of assuming that the default port
-is always available.
-
----
-
-## 4. Health check
-
-With ADOFAI running and AdofaiIpc enabled, call the health endpoint:
-
-```bash
-curl -s http://127.0.0.1:32145/ipc/health
-```
-
-If AdofaiIpc selected a fallback port, replace `32145` with that port. A valid response contains
-the server name, protocol version, and active port.
+Reference the built `build/AdofaiIpc/AdofaiIpc.dll` in a consuming mod, require IPC1.0.0 in its
+bootstrap manifest, and ship the pinned dependency artifacts. The TypeScript SDK is currently
+consumed as a source snapshot; see [the SDK guide](005-JsClient.md). Do not publish it to npm
+as part of this preparation.

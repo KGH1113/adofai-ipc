@@ -35,7 +35,7 @@ public class IpcDownloadSource : IDisposable
     ContentType = NormalizeContentType(contentType);
   }
 
-  protected IpcDownloadSource(
+  public IpcDownloadSource(
     Action<Stream> writeTo,
     long byteLength,
     string fileName,

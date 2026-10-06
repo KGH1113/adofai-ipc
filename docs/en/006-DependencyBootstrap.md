@@ -7,7 +7,7 @@ Dependent mods package a fixed `AdofaiIpc.DependencyShim.dll`, a three-field
 AdofaiIpc.DependencyShim.dll
 AdofaiIpcBootstrap.json
 DependencyBootstrap/state.json
-DependencyBootstrap/versions/0.4.1/AdofaiIpc.Bootstrap.dll
+DependencyBootstrap/versions/1.0.0/AdofaiIpc.Bootstrap.dll
 ```
 
 `Info.json` points to `AdofaiIpc.DependencyShim.DependencyShim.Load`. The manifest declares only
@@ -29,3 +29,5 @@ The first bridge releases use the shared `AdofaiIpc.Migration.dll`. They install
 bootstrap, stop the dependent core for that session, and show one dialog listing every affected mod.
 The user reinstalls only AdofaiIpc, fully quits the game, and starts it again. New installations use
 the final layout directly and do not need this transition.
+
+For v1 peers, set `MinimumAdofaiIpcVersion` to `1.0.0` and pin the rebuilt bootstrap/shim checksums in the consumer lock. Install the local v1 build during preparation; the v1 public release has not been created.

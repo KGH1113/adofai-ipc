@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using AdofaiIpc.Core;
 
 namespace AdofaiIpc;
@@ -6,55 +8,35 @@ namespace AdofaiIpc;
 public sealed class AdofaiIpcNamespace
 {
   private readonly IpcRegistry _registry;
-
+  internal readonly CancellationTokenSource Lifetime = new CancellationTokenSource();
   public string Name { get; }
   public IpcNamespaceInfo Info { get; }
   public IpcNamespaceStatus Status => _registry.GetNamespaceStatus(Name);
+  public event Action<IpcPeerInfo> PeerSubscribed;
+  public event Action<IpcPeerInfo> PeerDisconnected;
+  public event Action<IpcPeerEvent> PeerEvent;
 
   internal AdofaiIpcNamespace(IpcRegistry registry, string name, IpcNamespaceInfo info)
-  {
-    _registry = registry;
-    Name = name;
-    Info = info;
-  }
+  { _registry = registry; Name = name; Info = info; }
 
-  public void Register(string method, Func<IpcRequest, object> handler)
-  {
-    _registry.RegisterMethod(Name, method, handler, false);
-  }
-
-  public void RegisterMainThread(string method, Func<IpcRequest, object> handler)
-  {
-    _registry.RegisterMethod(Name, method, handler, true);
-  }
-
-  public void RegisterDownload(string method, Func<IpcRequest, object> handler)
-  {
-    _registry.RegisterDownloadMethod(Name, method, handler, false);
-  }
-
-  public void RegisterDownloadMainThread(string method, Func<IpcRequest, object> handler)
-  {
-    _registry.RegisterDownloadMethod(Name, method, handler, true);
-  }
-
-  public void MarkInitializing()
-  {
-    _registry.SetNamespaceInitializing(Name);
-  }
-
-  public void MarkReady()
-  {
-    _registry.SetNamespaceReady(Name);
-  }
-
-  public void MarkError(string code, string message)
-  {
-    _registry.SetNamespaceError(Name, code, message);
-  }
-
-  public bool Unregister(string method)
-  {
-    return _registry.UnregisterMethod(Name, method);
-  }
+  public void RegisterCommand(string name, Action<IpcCommand> handler)
+  { _registry.RegisterCommand(this, name, command => { handler(command); return Task.CompletedTask; }, false); }
+  public void RegisterMainThreadCommand(string name, Action<IpcCommand> handler)
+  { _registry.RegisterCommand(this, name, command => { handler(command); return Task.CompletedTask; }, true); }
+  public void RegisterAsyncCommand(string name, Func<IpcCommand, Task> handler)
+  { _registry.RegisterCommand(this, name, handler, false); }
+  public void RegisterDownloadCommand(string name, Func<IpcCommand, object> handler)
+  { RegisterCommand(name, command => _registry.CreateDownload(this, command, handler(command))); }
+  public void MarkInitializing() => _registry.SetStatus(this, IpcNamespaceStatus.Initializing, null, null);
+  public void MarkReady() => _registry.SetStatus(this, IpcNamespaceStatus.Ready, null, null);
+  public void MarkError(string code, string message) => _registry.SetStatus(this, IpcNamespaceStatus.Error, code, message);
+  public bool Unregister(string name) => _registry.UnregisterCommand(this, name);
+  public void Publish(string name, object payload) => _registry.Publish(this, name, payload);
+  public void SendToPeer(string peerId, string name, object payload, string correlationId = null)
+    => _registry.SendToPeer(this, peerId, "event", name, payload, correlationId);
+  public string SendCommandToPeer(string peerId, string name, object payload)
+    => _registry.SendToPeer(this, peerId, "command", name, payload, null);
+  internal void NotifySubscribed(IpcPeerInfo peer) => PeerSubscribed?.Invoke(peer);
+  internal void NotifyDisconnected(IpcPeerInfo peer) => PeerDisconnected?.Invoke(peer);
+  internal void NotifyEvent(IpcPeerEvent message) => PeerEvent?.Invoke(message);
 }

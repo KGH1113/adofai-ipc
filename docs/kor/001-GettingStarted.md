@@ -1,74 +1,20 @@
-# AdofaiIpc 개발 가이드 - 시작하기
+# 시작하기
 
-## [목차로 이동](000-DevelopGuide.md)
+[목차](000-DevelopGuide.md) | [English](../en/001-GettingStarted.md)
 
-1. [AdofaiIpc란?](#1-adofaiipc%EB%9E%80)
-2. [런타임 요구사항](#2-%EB%9F%B0%ED%83%80%EC%9E%84-%EC%9A%94%EA%B5%AC%EC%82%AC%ED%95%AD)
-3. [포트 정책](#3-%ED%8F%AC%ED%8A%B8-%EC%A0%95%EC%B1%85)
-4. [동작 확인](#4-%EB%8F%99%EC%9E%91-%ED%99%95%EC%9D%B8)
+ADOFAI와 UnityModManager가 필요합니다. 런타임은 netstandard2.1을 대상으로 하며 격리한
+managed WebSocket 구현을 포함합니다. 게임의 Mono HttpListener WebSocket upgrade 구현은
+NotImplementedException을 던지므로 사용하지 않습니다.
 
----
+v1 준비 중에는 `./scripts/run.sh build`로 로컬 소스를 빌드하세요. 어셈블리와 테스트를 검증하고
+설정된 `Mods/AdofaiIpc`에 설치합니다. `ADOFAIIPC_SKIP_INSTALL=1`을 지정하면 설치를 생략합니다.
+`./scripts/run.sh package`는 모드 ZIP과 체크섬을 만들고 검증합니다. 공개 릴리즈는 수행하지 않습니다.
 
-## 1. AdofaiIpc란?
+IPv4 loopback의32145부터32155까지 사용 가능한 포트를 선택합니다.
+`ws://127.0.0.1:<port>/ipc/ws`와 subprotocol `adofai-ipc.v3`로 연결합니다. SDK는 직접 WebSocket
+연결을 시도하고 welcome을 검증합니다. `GET /ipc/health`는 진단용으로 유지하며 server,
+serverVersion, protocolVersion, port를 반환합니다.
 
-AdofaiIpc는 ADOFAI 모드와 외부 클라이언트 사이를 연결하는 로컬 IPC 게이트웨이입니다.
-
-브라우저 userscript, 웹 UI, CLI, 개발 도구는 AdofaiIpc의 HTTP endpoint로 요청을
-보내고, AdofaiIpc는 요청의 `namespace`와 `method`를 기준으로 실제 모드 handler를
-호출합니다.
-
-모드 개발자는 직접 `HttpListener`를 만들 필요 없이 AdofaiIpc API로 method만
-등록하면 됩니다.
-
----
-
-## 2. 런타임 요구사항
-
-AdofaiIpc는 별도 framework 모드 없이 UnityModManager에서 직접 실행됩니다.
-
-필요한 항목은 다음과 같습니다.
-
-* A Dance of Fire and Ice
-* UnityModManager
-* `Mods/AdofaiIpc`에 설치된 AdofaiIpc
-
-AdofaiIpc를 사용하는 다른 모드는 빌드할 때 버전별 `AdofaiIpc.dll` 산출물을 참조해야 합니다.
-고정 dependency shim을 포함한 모드는 AdofaiIpc가 설치되어 있지 않을 때 GitHub
-Releases에서 최신 패키지를 자동으로 설치할 수 있습니다. 의존성 오류는 게임 안의 공용
-안내창 하나에 합쳐 표시됩니다. 전환 릴리스가 기존 의존 모드를 자동으로 바꾸므로,
-AdofaiIpc 0.2.0 기존 사용자는 AdofaiIpc만 한 번 다시 설치하면 됩니다.
-
----
-
-## 3. 포트 정책
-
-AdofaiIpc는 기본적으로 다음 주소에서 시작을 시도합니다.
-
-```text
-http://127.0.0.1:32145/
-```
-
-이미 해당 포트가 사용 중이면 `32146`, `32147`처럼 1씩 증가시키며 사용 가능한 포트를
-찾습니다. 현재 구현은 `32155`까지 fallback을 시도합니다.
-
-클라이언트는 고정 포트 하나만 가정하기보다 `32145`부터 순서대로 `/ipc/health`를
-호출해 살아있는 AdofaiIpc 서버를 찾는 방식을 권장합니다.
-
----
-
-## 4. 동작 확인
-
-ADOFAI가 실행 중이고 AdofaiIpc가 정상적으로 로드되었다면 health endpoint로 확인할 수 있습니다.
-
-```bash
-curl -s http://127.0.0.1:32145/ipc/health
-```
-
-fallback 포트로 실행된 경우에는 다음처럼 포트를 바꿔 확인합니다.
-
-```bash
-curl -s http://127.0.0.1:32146/ipc/health
-```
-
-응답에 `ok`, `server`, `protocolVersion`, `port` 같은 정보가 포함되면 IPC listener가
-정상적으로 동작 중입니다.
+소비 모드는 `build/AdofaiIpc/AdofaiIpc.dll`을 참조하고 Bootstrap manifest의 최소 버전을1.0.0으로
+설정해 고정된 dependency 산출물을 패키징합니다. TS SDK는 [SDK 가이드](005-JsClient.md)대로
+소스 snapshot을 사용합니다. 이번 준비 작업에서는 npm에 게시하지 않습니다.

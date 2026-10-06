@@ -1,29 +1,22 @@
-# AdofaiIpc 개발 가이드
+# ADOFAI-IPC v1 개발 가이드
 
 [English](../en/000-DevelopGuide.md)
 
-## 소개
+ADOFAI-IPC는 A Dance of Fire and Ice 모드가 함께 사용하는 로컬 WebSocket 게이트웨이입니다.
+모드와 외부 앱은 서로 명령을 보내고, 이름 있는 결과 이벤트로 응답하고, 상태 변화를 발행합니다.
+제품1.0.0의 wire protocol은3입니다. 기존 HTTP RPC API는 제거했습니다.
 
-AdofaiIpc는 A Dance of Fire and Ice 모드들이 하나의 localhost HTTP listener를
-공유할 수 있도록 만든 독립형 UnityModManager IPC 모드입니다.
-
-각 모드는 직접 HTTP 서버를 열지 않고, AdofaiIpc에 자신의 namespace와 method를
-등록합니다. 외부 클라이언트는 JSON body에 `namespace`, `method`, `params`,
-`id`를 담아 하나의 IPC endpoint로 요청합니다.
-
-> ⚠️ **주의**
->
-> AdofaiIpc는 다른 모드가 참조하는 public API assembly이기도 합니다.
-> 모드 생명주기에서는 활성화/비활성화 흐름에 맞춰
-> register/unregister를 명확히 해주세요.
-
----
-
-## 목차
+UnityModManager 모드 하나가 listener를 소유합니다. 각 모드는 namespace, 도메인 메시지 계약,
+작업 수명과 상태를 소유하고 전송 계층은 라우팅과 연결 수명을 맡습니다.
 
 1. [시작하기](001-GettingStarted.md)
 2. [모드 API](002-ModApi.md)
-3. [HTTP 프로토콜](003-HttpProtocol.md)
-4. [라이프사이클](004-Lifecycle.md)
-5. [JavaScript/TypeScript Client](005-JsClient.md)
-6. [의존 모드 Bootstrap](006-DependencyBootstrap.md)
+3. [WebSocket 메시지 프로토콜](003-MessageProtocol.md)
+4. [수명과 스레드](004-Lifecycle.md)
+5. [TypeScript SDK](005-JsClient.md)
+6. [의존성 Bootstrap](006-DependencyBootstrap.md)
+7. [스트리밍 다운로드](007-Downloads.md)
+
+애플리케이션은 자체 메시지·세션·스케줄러·시계·저장소 port에 의존하게 만드세요. SDK, Unity,
+네이티브 구현은 composition root에서 주입합니다. 최초 snapshot과 revision을 가진 변경 이벤트로
+상태를 투영하고, 상태를 반복 조회하는 polling은 제거합니다.

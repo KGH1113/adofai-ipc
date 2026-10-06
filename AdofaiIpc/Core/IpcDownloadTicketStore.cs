@@ -71,7 +71,19 @@ internal sealed class IpcDownloadTicketStore
     out IpcDownloadSource source,
     out string errorCode,
     out string errorMessage)
+    => TryTake(token, origin, out source, out _, out errorCode, out errorMessage);
+
+  // The response may grant browser read access only when this ticket carries
+  // an explicit mod allowlist. An unrestricted/native ticket gets no CORS grant.
+  internal bool TryTake(
+    string token,
+    string origin,
+    out IpcDownloadSource source,
+    out string approvedBrowserOrigin,
+    out string errorCode,
+    out string errorMessage)
   {
+    approvedBrowserOrigin = null;
     source = null;
     errorCode = null;
     errorMessage = null;
@@ -109,6 +121,11 @@ internal sealed class IpcDownloadTicketStore
         // if the client disconnects during the stream.
         _tickets.Remove(token);
         source = ticket.Source;
+        if (ticket.AllowedOrigins != null && ticket.AllowedOrigins.Length > 0
+          && Uri.TryCreate(origin, UriKind.Absolute, out Uri originUri)
+          && (originUri.Scheme == "http" || originUri.Scheme == "https")
+          && origin == originUri.GetLeftPart(UriPartial.Authority))
+          approvedBrowserOrigin = originUri.GetLeftPart(UriPartial.Authority);
       }
     }
 

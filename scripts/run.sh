@@ -13,6 +13,7 @@ Commands:
   build    Build, test, and optionally install the mod
   package  Build and verify the mod ZIP and checksum
   client   Check and test the npm client
+  client-sync  Copy raw SDK source and provenance into a consumer vendor directory
   client-pack  Check and pack the npm client to ADOFAIIPC_CLIENT_PACK_DESTINATION
   check    Validate all shell scripts and version metadata
   help     Show this help
@@ -23,6 +24,7 @@ case "${1:-help}" in
   build) exec "$SCRIPTS_DIR/workflows/build-install.sh" ;;
   package) exec "$SCRIPTS_DIR/workflows/package.sh" ;;
   client) exec "$SCRIPTS_DIR/workflows/client.sh" ;;
+  client-sync) shift; exec node "$SCRIPTS_DIR/tasks/client/sync-source.mjs" "$@" ;;
   client-pack) exec "$SCRIPTS_DIR/workflows/client-pack.sh" ;;
   check) exec "$SCRIPTS_DIR/workflows/check-scripts.sh" ;;
   help|-h|--help) usage ;;

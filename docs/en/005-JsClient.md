@@ -1,147 +1,63 @@
-# AdofaiIpc Developer Guide - JavaScript/TypeScript Client
+# TypeScript SDK
 
-[Guide index](000-DevelopGuide.md) | [Korean](../kor/005-JsClient.md)
+[Guide](000-DevelopGuide.md) | [한국어](../kor/005-JsClient.md)
 
-1. [Package](#1-package)
-2. [Automatic port discovery](#2-automatic-port-discovery)
-3. [Calling namespaces](#3-calling-namespaces)
-4. [Building the package](#4-building-the-package)
-
----
-
-## 1. Package
-
-The client is published as `@adofai-ipc/client` and is maintained in
-`packages/client` inside this repository.
+The v1 SDK is not published to npm during this preparation. Generate a reproducible snapshot:
 
 ```bash
-npm install @adofai-ipc/client
+./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc
 ```
 
-The package includes TypeScript declarations and supports both ESM and CommonJS consumers.
-It requires a runtime with `fetch` and `AbortController`, such as a modern browser or Node.js 18
-or later.
-
----
-
-## 2. Automatic port discovery
-
-AdofaiIpc starts at port `32145` and may fall back through `32155`. Use `tryConnect` to find the
-active listener by calling `/ipc/health` on each candidate port.
+Commit the generated src, LICENSE, README.md and source.json in the consumer. The manifest records
+the upstream commit, dirty-source marker, SDK/wire version and SHA-256 per source file. Regenerate
+after changing upstream. Avoid absolute file dependencies and manual copies of the transport.
+Point Vite/TypeScript aliases at the raw source if keeping an existing import alias; remove the
+registry dependency and update lockfiles. Raw source requires no tsup-only version definition.
 
 ```ts
-import { tryConnect } from "@adofai-ipc/client";
+import { IpcConnection } from "./vendor/adofai-ipc/src";
 
-const client = await tryConnect();
-console.log(client.baseUrl);
-```
+// Register listeners before connecting so the initial snapshot cannot be lost.
+const connection = new IpcConnection();
+const channel = connection.namespace("example-mod");
+channel.on<{ revision: number }>("library.snapshot", snapshot => projectLibrary(snapshot));
+channel.on<{ revision: number }>("library.changed", change => projectLibrary(change));
+channel.on("level.opened", (payload, message) => applyOpenedLevel(payload, message.correlationId));
+channel.on("command.rejected", (error, message) => showFailure(error, message.correlationId));
+await connection.start();
+await channel.whenReady({ timeoutMs: 15_000 });
+const commandId = channel.send("level.open", { levelId: "abc" });
 
-Discovery options can override the host, port range, fetch implementation, probe timeout, and the
-timeout used by the returned client.
-
-```ts
-const client = await tryConnect({
-  host: "127.0.0.1",
-  startPort: 32145,
-  endPort: 32155,
-  probeTimeoutMs: 500,
-  requestTimeoutMs: 10_000
+channel.onCommand("render.frame", (frame, message) => {
+    // Perform the domain operation; report its actual completion.
+    channel.reply(message.id, "render.frame.ready", { path: "/tmp/frame.png" });
 });
+// On application shutdown:
+connection.close();
 ```
 
-`tryConnect` ignores individual probe failures and throws an `IpcConnectionError` with code
-`UNAVAILABLE` only if it cannot find an AdofaiIpc server on any candidate port.
+`connectIpc(options)` creates and starts a connection. `new IpcConnection(options)` lets you create
+channels and install listeners first. Defaults: host127.0.0.1, ports32145..32155, timeout1500ms per
+probe. Options include transportFactory and onProtocolMismatch. A browser uses global WebSocket;
+Node without global WebSocket and native applications inject an IpcTransport factory.
 
-A successful `tryConnect` only confirms that the AdofaiIpc listener is running. It does not mean
-that a target namespace is registered or that the owning mod is ready. The legacy `timeoutMs`
-option remains as a deprecated alias for both timeout values.
+The transport port exposes connect, send, close, onMessage and onClose. send/close may be async.
+Its onMessage callback supplies UTF-8 JSON strings. It must support the supplied WebSocket
+subprotocol and dispose probe connections/listeners on failure.
 
----
+Connection: namespace(name), onState(listener), state, peerId, connectionId, close(). States:
+disconnected, connected, reconnecting, closed, incompatible. Reconnect uses bounded jittered
+backoff and resubscribes without replay. onState immediately reports the current state.
 
-## 3. Calling namespaces
+Channel: on(name,callback), onCommand(name,callback), send(name,payload,{id,signal}), emit(name,
+payload), reply(correlationId,name,payload), onStatus(callback), status, error, whenReady({timeoutMs,
+signal}). send returns an ID immediately, not a Promise of a generic result. An AbortSignal only
+guards a send before transmission; cancel an already running operation with a domain command.
+Unsubscribe functions release handlers. The application owns correlation, domain timeouts,
+disconnection rejection, retry policy and state projection.
 
-Call a method by passing its namespace, method, and parameters:
-
-```ts
-const result = await client.call({
-  namespace: "example-mod",
-  method: "level.open-from-id",
-  params: {
-    id: "1234"
-  },
-  timeoutMs: 30_000
-});
-```
-
-Create a namespace-scoped client when several calls target the same mod:
-
-```ts
-const exampleMod = client.namespace("example-mod");
-
-await exampleMod.call("level.open-from-id", {
-  id: "1234"
-});
-```
-
-The client also exposes discovery helpers:
-
-```ts
-await client.health();
-await client.listNamespaces();
-await client.getNamespace("example-mod");
-```
-
-Wait separately when a namespace may not have registered yet:
-
-```ts
-await client.waitForNamespace("example-mod", {
-  status: "ready",
-  timeoutMs: 15_000,
-  pollIntervalMs: 100
-});
-```
-
-Namespace registration starts in `initializing`. The owning mod must explicitly transition it to
-`ready` or `error`, and AdofaiIpc blocks method calls until it is ready. A ready wait that expires
-reports `namespace_initializing`; an initialization failure reports `namespace_error`.
-
-Protocol errors, including `namespace_not_found`, `namespace_initializing`, and `namespace_error`,
-are reported as `IpcResponseError`, while non-protocol HTTP failures are reported as
-`IpcHttpError`.
-
-Connection failures use `IpcConnectionError`. A request that reaches its configured timeout throws
-`IpcTimeoutError`, which extends `IpcConnectionError` and has code `TIMEOUT`.
-`isIpcUnavailable` only matches connection errors whose code is `UNAVAILABLE`.
-
-```ts
-import {
-  IpcTimeoutError,
-  isIpcUnavailable
-} from "@adofai-ipc/client";
-
-try {
-  await client.health();
-} catch (error) {
-  if (error instanceof IpcTimeoutError) {
-    console.warn(`AdofaiIpc timed out after ${error.timeoutMs} ms.`);
-  } else if (isIpcUnavailable(error)) {
-    console.warn("AdofaiIpc is unavailable.");
-  }
-}
-```
-
----
-
-## 4. Building the package
-
-Build only the client package from the repository root:
-
-```bash
-pnpm --filter @adofai-ipc/client build
-```
-
-Run TypeScript checks for the workspace:
-
-```bash
-pnpm check
-```
+Initial absence throws IpcUnavailableError(codeUNAVAILABLE); wire mismatch throws
+IpcProtocolMismatchError(codeINCOMPATIBLE) and stops probing/retrying. whenReady is event driven;
+default timeout15000ms, IpcTimeoutError(codeTIMEOUT), or IpcNamespaceError(code from the mod).
+`isIpcUnavailable` matches UNAVAILABLE. The successful established connection reconnects itself,
+while an application supervisor handles retries before any server has been found.

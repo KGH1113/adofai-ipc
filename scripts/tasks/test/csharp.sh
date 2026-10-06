@@ -16,3 +16,7 @@ DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
 
 DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
   "$DOTNET_EXE" run --project "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc.Download.Tests/AdofaiIpc.Download.Tests.csproj"
+
+DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
+  "$DOTNET_EXE" run --project "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc.Protocol.Tests/AdofaiIpc.Protocol.Tests.csproj" \
+    -p:AdofaiManaged="$ADOFAI_MANAGED"

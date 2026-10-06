@@ -1,359 +1,195 @@
-import {
-  IpcConnectionError,
-  IpcHttpError,
-  IpcResponseError,
-  IpcTimeoutError,
-  IpcVersionMismatchError
-} from "./errors";
-import { CLIENT_VERSION, compareProductVersions } from "./version";
-import type {
-  AdofaiIpcClientOptions,
-  IpcCallOptions,
-  IpcErrorInfo,
-  IpcHealthResponse,
-  IpcNamespaceDetail,
-  IpcNamespacesResponse,
-  IpcRequestId,
-  IpcRequestOptions,
-  IpcResponse,
-  TryConnectOptions,
-  WaitForNamespaceOptions
-} from "./types";
+import { browserTransportFactory } from "./browser-transport";
+import { IpcNamespaceError, IpcProtocolMismatchError, IpcTimeoutError, IpcUnavailableError } from "./errors";
+import { IPC_SUBPROTOCOL, MAX_MESSAGE_BYTES, PROTOCOL_VERSION } from "./version";
+import type { ConnectIpcOptions, IpcCommandOptions, IpcConnectionState, IpcErrorInfo, IpcMessage, IpcNamespaceStatus, IpcReadyOptions, IpcTransport, IpcTransportFactory } from "./types";
 
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_START_PORT = 32145;
-const DEFAULT_END_PORT = 32155;
-const DEFAULT_PROBE_TIMEOUT_MS = 500;
-const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
-const DEFAULT_NAMESPACE_WAIT_TIMEOUT_MS = 10_000;
-const DEFAULT_NAMESPACE_POLL_INTERVAL_MS = 100;
+type Listener = (payload: any, message: IpcMessage<any>) => void;
+const encoder = new TextEncoder();
+let nextId = 0;
+function messageId(): string { return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${(++nextId).toString(36)}-${Math.random().toString(36).slice(2)}`; }
+function invoke<T>(listeners: Set<(value: T) => void>, value: T): void { for (const listener of [...listeners]) { try { listener(value); } catch { /* A consumer callback cannot break transport dispatch. */ } } }
+function parse(text: string): IpcMessage | null {
+  if (encoder.encode(text).length > MAX_MESSAGE_BYTES) return null;
+  try { const value = JSON.parse(text) as IpcMessage; return value && typeof value.kind === "string" && typeof value.name === "string" && typeof value.id === "string" ? value : null; } catch { return null; }
+}
 
-export class AdofaiIpcClient {
-  readonly baseUrl: string;
+export async function connectIpc(options: ConnectIpcOptions = {}): Promise<IpcConnection> {
+  const connection = new IpcConnection(options);
+  await connection.start(); return connection;
+}
 
-  private readonly fetchImpl: typeof fetch;
-  private readonly requestTimeoutMs: number;
+export class IpcConnection {
+  private readonly channels = new Map<string, IpcChannel>();
+  private readonly states = new Set<(state: IpcConnectionState) => void>();
+  private readonly factory: IpcTransportFactory;
+  private transport: IpcTransport | undefined;
+  private bindings: Array<() => void> = [];
+  private stopped = false;
+  private recovering = false;
+  private _state: IpcConnectionState = "disconnected";
+  private readonly timeoutMs: number;
+  private readonly startPort: number;
+  private readonly endPort: number;
+  private readonly host: string;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private wakeRetry: (() => void) | undefined;
+  peerId: string | undefined;
+  connectionId: string | undefined;
 
-  constructor(options: AdofaiIpcClientOptions = {}) {
-    this.baseUrl = normalizeBaseUrl(options.baseUrl ?? `http://${DEFAULT_HOST}:${DEFAULT_START_PORT}`);
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
-    this.requestTimeoutMs =
-      options.requestTimeoutMs ?? options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-
-    if (!this.fetchImpl) {
-      throw new IpcConnectionError("A fetch implementation is required.");
-    }
+  constructor(private readonly options: ConnectIpcOptions = {}) {
+    this.factory = options.transportFactory ?? browserTransportFactory;
+    this.timeoutMs = options.connectTimeoutMs ?? 1500;
+    this.startPort = options.startPort ?? 32145; this.endPort = options.endPort ?? 32155;
+    this.host = options.host ?? "127.0.0.1";
+    if (!["127.0.0.1", "localhost"].includes(this.host) || !Number.isInteger(this.startPort) || !Number.isInteger(this.endPort) || this.startPort < 1 || this.endPort > 65535 || this.endPort < this.startPort || this.endPort - this.startPort > 32 || this.timeoutMs <= 0) throw new TypeError("Invalid localhost IPC discovery options.");
   }
-
-  static async connect(options: TryConnectOptions = {}): Promise<AdofaiIpcClient> {
-    return tryConnect(options);
+  get state(): IpcConnectionState { return this._state; }
+  onState(listener: (state: IpcConnectionState) => void): () => void { this.states.add(listener); listener(this._state); return () => this.states.delete(listener); }
+  namespace(name: string): IpcChannel {
+    if (!/^[a-z0-9-]+$/.test(name)) throw new TypeError("Invalid IPC namespace.");
+    let channel = this.channels.get(name);
+    if (!channel) { channel = new IpcChannel(this, name); this.channels.set(name, channel); if (this.state === "connected") this.subscribe(name); }
+    return channel;
   }
-
-  async health(options: IpcRequestOptions = {}): Promise<IpcHealthResponse> {
-    return this.get<IpcHealthResponse>("/ipc/health", options);
+  async start(): Promise<void> {
+    if (this.stopped) throw new IpcUnavailableError();
+    try { const session = await this.discover(); this.bind(session.transport, session.welcome); }
+    catch (error) { if (error instanceof IpcProtocolMismatchError) this.incompatible(error); throw error; }
   }
-
-  async listNamespaces(options: IpcRequestOptions = {}): Promise<IpcNamespacesResponse> {
-    return this.get<IpcNamespacesResponse>("/ipc/namespaces", options);
+  close(): void {
+    if (this.stopped) return;
+    this.stopped = true; clearTimeout(this.retryTimer); this.wakeRetry?.(); this.wakeRetry = undefined;
+    for (const unbind of this.bindings) unbind(); this.bindings = [];
+    const transport = this.transport; this.transport = undefined;
+    if (transport) this.disposeTransport(transport);
+    for (const channel of this.channels.values()) channel.disconnected();
+    this.setState("closed");
   }
-
-  async getNamespace(
-    namespace: string,
-    options: IpcRequestOptions = {}
-  ): Promise<IpcNamespaceDetail> {
-    return this.get<IpcNamespaceDetail>(
-      `/ipc/namespaces/${encodeURIComponent(namespace)}`,
-      options
-    );
+  send(kind: "command" | "event", namespace: string, name: string, payload: unknown, options: IpcCommandOptions = {}, correlationId?: string): string {
+    if (options.signal?.aborted) throw options.signal.reason ?? new DOMException("Aborted", "AbortError");
+    if (this.state !== "connected" || !this.transport || this.stopped) throw new IpcUnavailableError();
+    if (!/^[a-z0-9.-]+$/.test(name)) throw new TypeError("Invalid IPC message name.");
+    const id = options.id ?? messageId();
+    if (!id || id.length > 128) throw new TypeError("Invalid IPC message id.");
+    this.write({ kind, namespace, name, id, correlationId, payload: payload ?? {} }); return id;
   }
-
-  async waitForNamespace(
-    namespace: string,
-    options: WaitForNamespaceOptions = {}
-  ): Promise<IpcNamespaceDetail> {
-    const timeoutMs = options.timeoutMs ?? DEFAULT_NAMESPACE_WAIT_TIMEOUT_MS;
-    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_NAMESPACE_POLL_INTERVAL_MS;
-    const requiredStatus = options.status ?? "registered";
-    const deadline = Date.now() + timeoutMs;
-    let stateError: IpcResponseError | undefined;
-
-    while (true) {
+  private subscribe(namespace: string): void { this.write({ kind: "subscribe", namespace, name: "namespace.subscribe", id: messageId(), payload: {} }); }
+  private write(message: IpcMessage): void {
+    const transport = this.transport;
+    if (!transport) throw new IpcUnavailableError();
+    const text = JSON.stringify(message);
+    if (encoder.encode(text).length > MAX_MESSAGE_BYTES) throw new RangeError("IPC control message exceeds 2 MiB.");
+    try { const result = transport.send(text); if (result) void result.catch(() => this.lost(transport)); }
+    catch (error) { this.lost(transport); throw error; }
+  }
+  private async discover(): Promise<{ transport: IpcTransport; welcome: IpcMessage }> {
+    for (let port = this.startPort; port <= this.endPort; port++) {
+      if (this.stopped) throw new IpcUnavailableError();
+      const transport = this.factory(`ws://${this.host}:${port}/ipc/ws`, IPC_SUBPROTOCOL);
+      let resolveWelcome!: (message: IpcMessage) => void; let rejectWelcome!: (reason: unknown) => void;
+      const welcome = new Promise<IpcMessage>((resolve, reject) => { resolveWelcome = resolve; rejectWelcome = reject; });
+      // Attach a rejection handler immediately: native transports can close before connect resolves.
+      void welcome.catch(() => {});
+      const offMessage = transport.onMessage(text => { const message = parse(text); if (message?.kind === "welcome") resolveWelcome(message); });
+      const offClose = transport.onClose(reason => rejectWelcome(reason ?? new IpcUnavailableError()));
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const detail = await this.getNamespace(namespace, {
-          timeoutMs: options.requestTimeoutMs
-        });
-
-        if (requiredStatus === "registered" || detail.status === "ready") {
-          return detail;
-        }
-
-        if (detail.status === "error") {
-          throw new IpcResponseError({
-            code: "namespace_error",
-            message: detail.error?.message ?? `Namespace initialization failed: ${namespace}`
-          });
-        }
-
-        if (detail.status !== "initializing") {
-          throw new IpcResponseError({
-            code: "namespace_status_unavailable",
-            message: `Namespace status is unavailable: ${namespace}`
-          });
-        }
-
-        stateError = new IpcResponseError({
-          code: "namespace_initializing",
-          message: `Namespace is initializing: ${namespace}`
-        });
+        const verified = await Promise.race([
+          (async () => { await transport.connect(); return await welcome; })(),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new IpcTimeoutError(this.timeoutMs)), this.timeoutMs); })
+        ]);
+        const data = verified.payload as { server?: string; protocolVersion?: number; serverVersion?: string };
+        if (data?.server !== "AdofaiIpc") throw new IpcUnavailableError();
+        if (data.protocolVersion !== PROTOCOL_VERSION) throw new IpcProtocolMismatchError(data.protocolVersion ?? null, data.serverVersion ?? null);
+        if (this.stopped) throw new IpcUnavailableError();
+        return { transport, welcome: verified };
       } catch (error) {
-        if (
-          !(error instanceof IpcResponseError) ||
-          (error.code !== "namespace_not_found" && error.code !== "namespace_initializing")
-        ) {
-          throw error;
-        }
-
-        stateError = error;
-      }
-
-      const remainingMs = deadline - Date.now();
-      if (remainingMs <= 0) {
-        throw stateError ?? new IpcResponseError({
-          code: "namespace_initializing",
-          message: `Namespace is initializing: ${namespace}`
-        });
-      }
-
-      await delay(Math.min(pollIntervalMs, remainingMs));
+        this.disposeTransport(transport);
+        if (error instanceof IpcProtocolMismatchError) throw error;
+      } finally { clearTimeout(timer); offMessage(); offClose(); }
     }
+    throw new IpcUnavailableError();
   }
-
-  namespace(namespace: string): AdofaiIpcNamespaceClient {
-    return new AdofaiIpcNamespaceClient(this, namespace);
+  private bind(transport: IpcTransport, welcome: IpcMessage): void {
+    if (this.stopped) { this.disposeTransport(transport); return; }
+    this.transport = transport;
+    const data = welcome.payload as { peerId: string; connectionId: string }; this.peerId = data.peerId; this.connectionId = data.connectionId;
+    this.bindings = [transport.onMessage(text => {
+      if (this.transport !== transport || this.stopped) return;
+      const message = parse(text); if (!message) { this.lost(transport); return; }
+      if (message.kind === "ping") { this.write({ kind: "pong", name: "connection.pong", id: messageId(), correlationId: message.id, payload: {} }); return; }
+      if (message.namespace) this.channels.get(message.namespace)?.receive(message);
+    }), transport.onClose(() => this.lost(transport))];
+    this.setState("connected");
+    this.write({ kind: "hello", name: "connection.hello", id: messageId(), payload: { protocolVersion: PROTOCOL_VERSION } });
+    for (const name of this.channels.keys()) this.subscribe(name);
   }
-
-  async call<TResult = unknown, TParams = unknown>(
-    options: IpcCallOptions<TParams>
-  ): Promise<TResult> {
-    const response = await this.post<IpcResponse<TResult>>(
-      "/ipc",
-      {
-        namespace: options.namespace,
-        method: options.method,
-        params: options.params ?? {},
-        id: options.id ?? createRequestId()
-      },
-      { timeoutMs: options.timeoutMs }
-    );
-
-    if (!response.ok) {
-      throw new IpcResponseError(response.error);
-    }
-
-    return response.result;
+  private lost(transport: IpcTransport): void {
+    if (this.transport !== transport || this.stopped) return;
+    this.transport = undefined; for (const unbind of this.bindings) unbind(); this.bindings = []; this.disposeTransport(transport);
+    this.peerId = undefined; this.connectionId = undefined;
+    for (const channel of this.channels.values()) channel.disconnected();
+    this.setState("reconnecting");
+    if (!this.recovering) void this.recover();
   }
-
-  private async get<TResult>(
-    path: string,
-    options: IpcRequestOptions = {}
-  ): Promise<TResult> {
-    return this.request<TResult>(path, {
-      method: "GET"
-    }, options);
-  }
-
-  private async post<TResult>(
-    path: string,
-    body: unknown,
-    options: IpcRequestOptions = {}
-  ): Promise<TResult> {
-    return this.request<TResult>(path, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    }, options);
-  }
-
-  private async request<TResult>(
-    path: string,
-    init: RequestInit,
-    options: IpcRequestOptions
-  ): Promise<TResult> {
-    const timeoutMs = options.timeoutMs ?? this.requestTimeoutMs;
-    const controller = new AbortController();
-    const timeoutError = new IpcTimeoutError(timeoutMs);
-    const timeout = setTimeout(() => controller.abort(timeoutError), timeoutMs);
-
+  private async recover(): Promise<void> {
+    this.recovering = true; let attempt = 0;
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        ...init,
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        const responseError = parseIpcResponseError(text);
-        if (responseError) throw new IpcResponseError(responseError);
-        throw new IpcHttpError(response.status, text || response.statusText);
+      while (!this.stopped && !this.transport) {
+        await new Promise<void>(resolve => { this.wakeRetry = resolve; this.retryTimer = setTimeout(resolve, Math.min(5000, 250 * 2 ** Math.min(attempt++, 5)) + Math.random() * 150); });
+        this.wakeRetry = undefined;
+        if (this.stopped) return;
+        try { const session = await this.discover(); this.bind(session.transport, session.welcome); }
+        catch (error) { if (error instanceof IpcProtocolMismatchError) { this.incompatible(error); return; } }
       }
-
-      return (await response.json()) as TResult;
-    } catch (error) {
-      if (error instanceof IpcHttpError || error instanceof IpcResponseError) throw error;
-      if (controller.signal.aborted) {
-        if (error === timeoutError) throw timeoutError;
-        throw new IpcTimeoutError(timeoutMs, { cause: error });
-      }
-      throw new IpcConnectionError(getErrorMessage(error), { cause: error });
-    } finally {
-      clearTimeout(timeout);
-    }
+    } finally { this.recovering = false; if (!this.stopped && !this.transport && this.state === "reconnecting") void this.recover(); }
   }
+  private incompatible(error: IpcProtocolMismatchError): void { this.stopped = true; this.setState("incompatible"); this.options.onProtocolMismatch?.(error); }
+  private setState(state: IpcConnectionState): void { this._state = state; invoke(this.states, state); }
+  private disposeTransport(transport: IpcTransport): void { try { const result = transport.close(); if (result) void result.catch(() => {}); } catch { } }
 }
 
-export class AdofaiIpcNamespaceClient {
-  constructor(
-    private readonly client: AdofaiIpcClient,
-    readonly namespace: string
-  ) {
-  }
-
-  async call<TResult = unknown, TParams = unknown>(
-    method: string,
-    params?: TParams,
-    idOrOptions?: IpcRequestId | IpcRequestOptions,
-    options: IpcRequestOptions = {}
-  ): Promise<TResult> {
-    const requestOptions = isIpcRequestOptions(idOrOptions) ? idOrOptions : options;
-    const id = isIpcRequestOptions(idOrOptions) ? undefined : idOrOptions;
-
-    return this.client.call<TResult, TParams>({
-      namespace: this.namespace,
-      method,
-      params,
-      id,
-      timeoutMs: requestOptions.timeoutMs
+export class IpcChannel {
+  private readonly events = new Map<string, Set<Listener>>();
+  private readonly commands = new Map<string, Set<Listener>>();
+  private readonly statuses = new Set<(status: IpcNamespaceStatus, error?: IpcErrorInfo) => void>();
+  private _status: IpcNamespaceStatus = "unavailable";
+  private _error: IpcErrorInfo | undefined;
+  constructor(private readonly connection: IpcConnection, readonly name: string) {}
+  get status(): IpcNamespaceStatus { return this._status; }
+  get error(): IpcErrorInfo | undefined { return this._error; }
+  on<T = unknown>(name: string, listener: (payload: T, message: IpcMessage<T>) => void): () => void { return this.listen(this.events, name, listener); }
+  onCommand<T = unknown>(name: string, listener: (payload: T, message: IpcMessage<T>) => void): () => void { return this.listen(this.commands, name, listener); }
+  onStatus(listener: (status: IpcNamespaceStatus, error?: IpcErrorInfo) => void): () => void { this.statuses.add(listener); listener(this.status, this.error); return () => this.statuses.delete(listener); }
+  send(name: string, payload?: unknown, options?: IpcCommandOptions): string { return this.connection.send("command", this.name, name, payload, options); }
+  emit(name: string, payload?: unknown): string { return this.connection.send("event", this.name, name, payload); }
+  reply(correlationId: string, name: string, payload?: unknown): string { return this.connection.send("event", this.name, name, payload, {}, correlationId); }
+  whenReady(options: IpcReadyOptions = {}): Promise<void> {
+    if (options.signal?.aborted) return Promise.reject(options.signal.reason ?? new DOMException("Aborted", "AbortError"));
+    if (this.status === "ready") return Promise.resolve();
+    if (this.status === "error") return Promise.reject(new IpcNamespaceError(this.error?.code ?? "namespace_error", this.error?.message ?? "The mod could not initialize."));
+    return new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined; let off = () => {};
+      const finish = (error?: unknown) => { clearTimeout(timer); off(); options.signal?.removeEventListener("abort", abort); if (error) reject(error); else resolve(); };
+      const abort = () => finish(options.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+      options.signal?.addEventListener("abort", abort, { once: true });
+      off = this.onStatus((status, error) => { if (status === "ready") finish(); else if (status === "error") finish(new IpcNamespaceError(error?.code ?? "namespace_error", error?.message ?? "The mod could not initialize.")); });
+      timer = setTimeout(() => finish(new IpcTimeoutError(options.timeoutMs ?? 15000)), options.timeoutMs ?? 15000);
     });
   }
-}
-
-export async function tryConnect(options: TryConnectOptions = {}): Promise<AdofaiIpcClient> {
-  const host = options.host ?? DEFAULT_HOST;
-  const startPort = options.startPort ?? DEFAULT_START_PORT;
-  const endPort = options.endPort ?? DEFAULT_END_PORT;
-  const probeTimeoutMs =
-    options.probeTimeoutMs ?? options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
-  const requestTimeoutMs =
-    options.requestTimeoutMs ?? options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  let lastProbeError: unknown;
-
-  for (let port = startPort; port <= endPort; port++) {
-    const client = new AdofaiIpcClient({
-      baseUrl: `http://${host}:${port}`,
-      fetch: options.fetch,
-      requestTimeoutMs: probeTimeoutMs
-    });
-
-    try {
-      const health = await client.health();
-
-      if (health.ok && health.server === "AdofaiIpc") {
-        const mismatch = getVersionMismatch(health);
-        if (mismatch) {
-          try {
-            options.onVersionMismatch?.(mismatch);
-          } catch {
-          }
-          throw mismatch;
-        }
-        return new AdofaiIpcClient({
-          baseUrl: client.baseUrl,
-          fetch: options.fetch,
-          requestTimeoutMs
-        });
-      }
-    } catch (error) {
-      if (error instanceof IpcVersionMismatchError) throw error;
-      lastProbeError = error;
+  /** Internal transport adapter dispatch. */
+  receive(message: IpcMessage): void {
+    if (message.kind === "namespace") {
+      const payload = message.payload as { status: IpcNamespaceStatus; error?: IpcErrorInfo };
+      if (["ready", "initializing", "error", "unavailable"].includes(payload?.status)) { this._status = payload.status; this._error = payload.error; for (const listener of [...this.statuses]) { try { listener(this.status, this.error); } catch { } } }
     }
+    const listeners = (message.kind === "command" ? this.commands : this.events).get(message.name);
+    if (listeners) for (const listener of [...listeners]) { try { listener(message.payload, message); } catch { } }
   }
-
-  if (lastProbeError instanceof IpcTimeoutError) throw lastProbeError;
-
-  throw new IpcConnectionError(
-    `Could not connect to AdofaiIpc on ${host}:${startPort}-${endPort}.`
-  );
-}
-
-function getVersionMismatch(health: IpcHealthResponse): IpcVersionMismatchError | null {
-  const protocolVersion = Number.isInteger(health.protocolVersion) ? health.protocolVersion : null;
-  const serverVersion = typeof health.serverVersion === "string" ? health.serverVersion : null;
-  const comparison = serverVersion === null
-    ? null
-    : compareProductVersions(serverVersion, CLIENT_VERSION);
-
-  if (comparison === 0 && serverVersion === CLIENT_VERSION) return null;
-
-  return new IpcVersionMismatchError({
-    clientVersion: CLIENT_VERSION,
-    serverVersion,
-    direction: comparison === null
-      ? "legacy_server"
-      : comparison < 0
-        ? "server_outdated"
-        : "client_outdated",
-    protocolVersion
-  });
-}
-
-function normalizeBaseUrl(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
+  disconnected(): void { this._status = "unavailable"; this._error = undefined; for (const listener of [...this.statuses]) { try { listener(this.status); } catch { } } }
+  private listen<T>(map: Map<string, Set<Listener>>, name: string, listener: (payload: T, message: IpcMessage<T>) => void): () => void {
+    let listeners = map.get(name); if (!listeners) { listeners = new Set(); map.set(name, listeners); }
+    const stored = listener as Listener; listeners.add(stored);
+    return () => { listeners?.delete(stored); if (!listeners?.size) map.delete(name); };
   }
-
-  return undefined;
-}
-
-function parseIpcResponseError(text: string): IpcErrorInfo | undefined {
-  try {
-    const value = JSON.parse(text) as { error?: unknown };
-    const error = value?.error;
-
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      typeof error.code === "string" &&
-      "message" in error &&
-      typeof error.message === "string"
-    ) {
-      return { code: error.code, message: error.message };
-    }
-  } catch {
-  }
-
-  return undefined;
-}
-
-function isIpcRequestOptions(value: unknown): value is IpcRequestOptions {
-  return typeof value === "object" && value !== null;
-}
-
-function delay(timeoutMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, timeoutMs));
-}
-
-function createRequestId(): string {
-  return `adofai-ipc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
