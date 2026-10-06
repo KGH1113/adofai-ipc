@@ -21,6 +21,7 @@ internal static class Program
     ns.RegisterCommand("level.open", cmd => { Interlocked.Increment(ref executions); cmd.Reply("level.opened", new { levelId = (string)cmd.Payload["levelId"] }); });
     ns.RegisterMainThreadCommand("queued.work", cmd => { Interlocked.Increment(ref executions); cmd.Reply("queued.done", new { }); });
     ns.RegisterCommand("denied.work", cmd => cmd.Reject("bad_level", "Pick another level."));
+    ns.RegisterCommand("denied.details", cmd => cmd.Reject("invalid_field", "Choose a valid output.", new { field = "outputDirectory", row = 2 }));
     ns.RegisterDownloadCommand("level.download", cmd => new IpcDownloadSource(new MemoryStream(Encoding.UTF8.GetBytes("a level file")), 12, "test.adofai"));
     ns.RegisterCommand("peer.challenge", cmd => ns.SendCommandToPeer(cmd.PeerId, "peer.answer", new { input = 42 }));
     ns.PeerEvent += evt => { if (evt.Name == "peer.answered") ns.SendToPeer(evt.PeerId, "peer.verified", evt.Payload, evt.CorrelationId); };
@@ -52,6 +53,10 @@ internal static class Program
       await client.Send("command", "test-mod", "denied.work", "deny1");
       await client.Next("command.accepted");
       Check((string)(await client.Next("command.rejected")).Payload["code"] == "bad_level", "domain rejection");
+      await client.Send("command", "test-mod", "denied.details", "deny-details1");
+      await client.Next("command.accepted");
+      var detailedRejection = await client.Next("command.rejected");
+      Check(detailedRejection.CorrelationId == "deny-details1" && (string)detailedRejection.Payload["details"]["field"] == "outputDirectory" && (int)detailedRejection.Payload["details"]["row"] == 2, "domain validation details and correlation");
       ns.Publish("progress.changed", new { revision = 2 });
       Check((int)(await client.Next("progress.changed")).Payload["revision"] == 2, "unsolicited push");
       await client.Send("command", "test-mod", "peer.challenge", "challenge1");

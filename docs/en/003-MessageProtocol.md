@@ -27,7 +27,7 @@ initializing and ready when registered and initialized later. Mod snapshots foll
 | command | Either peer asks the other to perform a named domain operation. Payload is an object. |
 | accepted | Router admitted a command. Named `command.accepted`, correlated to the command. |
 | event | Named result, snapshot or unsolicited state change; optional correlationId. |
-| rejected | Router or domain rejection: `command.rejected`, payload code/message. |
+| rejected | Router or domain rejection: `command.rejected`, payload code/message and optional structured details. |
 | namespace | Namespace lifecycle status/version/error snapshot. |
 | ping/pong | Transport liveness. No game or application state query. |
 

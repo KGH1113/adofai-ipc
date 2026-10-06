@@ -31,10 +31,13 @@ public sealed class IpcCommand
     _peer.Send(IpcPeerMessage.Create("event", Namespace, eventName, payload, Id));
   }
 
-  public void Reject(string code, string message)
+  public void Reject(string code, string message) => Reject(code, message, null);
+
+  public void Reject(string code, string message, object details)
   {
     if (Interlocked.Exchange(ref _rejected, 1) != 0) return;
-    _peer.Send(IpcPeerMessage.Create("rejected", Namespace, "command.rejected", new { code, message }, Id));
+    object payload = details == null ? (object)new { code, message } : new { code, message, details };
+    _peer.Send(IpcPeerMessage.Create("rejected", Namespace, "command.rejected", payload, Id));
   }
 
   internal void Fail(string code, string message)

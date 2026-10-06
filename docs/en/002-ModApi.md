@@ -36,6 +36,8 @@ AdofaiIpc.AdofaiIpc.UnregisterNamespace("example-mod");
 `RegisterAsyncCommand(name, Func<IpcCommand,Task>)` supports background asynchronous work.
 `RegisterMainThreadCommand(name, Action<IpcCommand>)` queues work for the game thread.
 Every handler must describe its domain outcome with `Reply`, `Reject`, and/or published events.
+`Reject(code,message,details)` also preserves structured domain validation information, such as
+field names and row numbers. Keep user-facing text in message and machine-readable data in details.
 `accepted` means validated and admitted to execution, not completed. Exceptions produce
 `command.failed`. A handler that returns silently has no automatic domain result.
 

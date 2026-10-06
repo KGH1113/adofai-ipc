@@ -27,7 +27,7 @@ ready 이후 모드의 최초 snapshot을 받습니다.
 | command | 양쪽 어느 peer나 시작하는 이름 있는 작업. payload는 object. |
 | accepted | router의 실행 수락. command.accepted와 원 명령 correlationId. |
 | event | 이름 있는 결과·snapshot·자발적 변경. correlationId는 선택 사항. |
-| rejected | command.rejected, payload code/message. |
+| rejected | command.rejected, payload code/message와 선택적인 구조화된 details. |
 | namespace | 수명 status/version/error snapshot. |
 | ping/pong | 전송 계층의 연결 생존 확인. |
 

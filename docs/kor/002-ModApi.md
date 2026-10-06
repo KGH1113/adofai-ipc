@@ -35,6 +35,8 @@ AdofaiIpc.AdofaiIpc.UnregisterNamespace("example-mod");
 RegisterCommand는 background worker에서 실행하는 Action<IpcCommand>, RegisterAsyncCommand는
 Func<IpcCommand,Task>를 받습니다. Unity를 접근하는 RegisterMainThreadCommand는 게임 스레드에
 작업을 큐잉합니다. handler는 Reply, Reject 또는 Publish로 실제 도메인 결과를 표현해야 합니다.
+Reject(code,message,details)는 필드 이름·행 번호 같은 도메인 검증 정보를 함께 전달합니다.
+사용자 안내는 message에, 구조화한 데이터는 details에 두세요.
 accepted는 실행을 허용했다는 뜻입니다. 완료를 의미하지 않습니다. 예외는 command.failed를
 보내며, handler가 반환한 것만으로 자동 결과 이벤트를 만들지는 않습니다.
 
