@@ -6,7 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json"><HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath></Reference>
-    <Compile Include="../AdofaiIpc/IpcCommand.cs;../AdofaiIpc/IpcProtocol.cs;../AdofaiIpc/IpcPeerMessage.cs;../AdofaiIpc/AdofaiIpcNamespace.cs;../AdofaiIpc/IpcNamespaceInfo.cs;../AdofaiIpc/IpcNamespaceStatus.cs;../AdofaiIpc/IpcLocalPeer.cs;../AdofaiIpc/IpcDownloadSource.cs;../AdofaiIpc/IpcDownloadResponse.cs;../AdofaiIpc/IpcDownloadError.cs" />
+    <Compile Include="../AdofaiIpc/IpcMessageTooLargeException.cs;../AdofaiIpc/IpcCommand.cs;../AdofaiIpc/IpcProtocol.cs;../AdofaiIpc/IpcPeerMessage.cs;../AdofaiIpc/AdofaiIpcNamespace.cs;../AdofaiIpc/IpcNamespaceInfo.cs;../AdofaiIpc/IpcNamespaceStatus.cs;../AdofaiIpc/IpcLocalPeer.cs;../AdofaiIpc/IpcDownloadSource.cs;../AdofaiIpc/IpcDownloadResponse.cs;../AdofaiIpc/IpcDownloadError.cs" />
     <Compile Include="../AdofaiIpc/Core/IpcRegistry.cs;../AdofaiIpc/Core/IIpcPeer.cs;../AdofaiIpc/Core/IpcNameValidator.cs;../AdofaiIpc/Core/IpcErrorCodes.cs;../AdofaiIpc/Core/IpcDownloadTicketStore.cs;../AdofaiIpc/Server/IpcServer.cs" />
     <Compile Include="../AdofaiIpc/Transport/ManagedWebSocket/**/*.cs" />
   </ItemGroup>

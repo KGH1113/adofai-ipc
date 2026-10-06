@@ -31,3 +31,21 @@ Origin policy. Browser CORS read access is granted only after successful ticket 
 an explicit matching allowlist; unrestricted/native tickets receive no CORS grant. Rejected Origin
 does not consume the ticket. Attachment navigation/native tools may omit Origin. Treat URLs as
 short-lived bearer capabilities and keep them scoped to the issuing peer's application flow.
+
+Domain handlers can keep a named outcome and attach small metadata to the same ticket:
+
+```csharp
+ipc.RegisterCommand("chart.read", command => {
+    var chart = charts.Find((string)command.Payload["id"]);
+    ipc.ReplyDownload(command, "chart.snapshot", chart.OpenDownload(),
+        new { chart.Id, chart.FloorCount });
+});
+```
+
+The named outcome contains `{url, byteLength, metadata}` and the command's correlationId.
+Metadata is bounded control data; file contents belong only in the download stream.
+ReplyDownload requires a command from the same namespace and transfers ownership of the source
+to the ticket lifecycle. If the outcome cannot be sent, its ticket is revoked and the source disposed.
+An oversized outgoing control message throws IpcMessageTooLargeException. During command
+execution it becomes a correlated `command.failed` with code `message_too_large`, keeping the
+connection and other subscriptions alive. Queue backpressure still closes a slow consumer.

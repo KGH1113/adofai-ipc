@@ -161,6 +161,7 @@ public sealed class IpcRegistry
       if (Interlocked.CompareExchange(ref executionState, 1, 0) != 0) return;
       try { if (!command.CancellationToken.IsCancellationRequested) await handler.Action(command).ConfigureAwait(false); }
       catch (OperationCanceledException) { }
+      catch (IpcMessageTooLargeException) { command.Fail("message_too_large", "The mod response exceeds the IPC message limit. Use a download ticket for large data."); }
       catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); command.Fail("handler_failed", "The mod could not complete the command."); }
       finally { Interlocked.Exchange(ref executionState, 2); cancellation.Dispose(); linked.Dispose(); _commandSlots.Release(); }
     };
@@ -225,7 +226,7 @@ public sealed class IpcRegistry
     var message = IpcPeerMessage.Create(kind, handle.Name, name, payload, correlationId); peer.Transport.Send(message); return message.Id;
   }
 
-  internal void CreateDownload(AdofaiIpcNamespace handle, IpcCommand command, object result)
+  internal void CreateDownload(AdofaiIpcNamespace handle, IpcCommand command, object result, string eventName = "download.ready", object metadata = null)
   {
     if (command.IsRejected || command.CancellationToken.IsCancellationRequested) { (result as IDisposable)?.Dispose(); return; }
     if (result is IpcDownloadError error) { command.Reject(error.Code, error.Message); return; }
@@ -233,7 +234,14 @@ public sealed class IpcRegistry
     if (string.IsNullOrEmpty(DownloadBaseUrl)) { source.Dispose(); command.Reject("unavailable", "The download server is unavailable."); return; }
     if (!_tickets.TryCreate(handle.Name, source, handle.Info.AllowedOrigins, out string token, out string code, out string reason))
     { source.Dispose(); command.Reject(code, reason); return; }
-    command.Reply("download.ready", new { url = DownloadBaseUrl.TrimEnd('/') + "/ipc/download/" + token, byteLength = source.ByteLength });
+    try
+    {
+      if (command.CancellationToken.IsCancellationRequested) { _tickets.Revoke(token); return; }
+      string url = DownloadBaseUrl.TrimEnd('/') + "/ipc/download/" + token;
+      object payload = metadata == null ? (object)new { url, byteLength = source.ByteLength } : new { url, byteLength = source.ByteLength, metadata };
+      command.Reply(eventName, payload);
+    }
+    catch { _tickets.Revoke(token); throw; }
   }
   internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string code, out string reason)
     => _tickets.TryTake(token, origin, out source, out code, out reason);

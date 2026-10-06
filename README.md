@@ -38,7 +38,8 @@ SDK/Unity/native 구현은 composition root에서 자체 port에 주입합니다
 - 연결 종료·namespace 해제 시 명령 취소, 자동 재구독과 snapshot 복구
 - 같은 게임 프로세스의 모드를 위한 공통 local-peer router
 - 메시지2MiB, 대기 큐·명령·peer 제한과 heartbeat
-- 큰 파일은1회용 HTTP 티켓으로64KiB chunk 스트리밍
+- 큰 파일은 이름 있는 결과·작은 메타데이터와1회용 HTTP 티켓으로64KiB chunk 스트리밍
+- 송신 제어 메시지 크기 초과는 해당 명령만 실패시키고 연결·구독 유지
 - 기존 fixed dependency shim과 versioned bootstrap/update 설치 구조 유지
 
 ## Build and install

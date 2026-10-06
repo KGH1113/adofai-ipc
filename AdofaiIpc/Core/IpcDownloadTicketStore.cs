@@ -133,6 +133,17 @@ internal sealed class IpcDownloadTicketStore
     return source != null;
   }
 
+  internal void Revoke(string token)
+  {
+    Ticket revoked;
+    lock (_sync)
+    {
+      if (!_tickets.TryGetValue(token, out revoked)) return;
+      _tickets.Remove(token);
+    }
+    revoked.Source.Dispose();
+  }
+
   internal void RevokeNamespace(string namespaceName)
   {
     List<Ticket> revoked = new List<Ticket>();

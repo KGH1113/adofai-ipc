@@ -27,6 +27,14 @@ public sealed class AdofaiIpcNamespace
   { _registry.RegisterCommand(this, name, handler, false); }
   public void RegisterDownloadCommand(string name, Func<IpcCommand, object> handler)
   { RegisterCommand(name, command => _registry.CreateDownload(this, command, handler(command))); }
+  /// <summary>Replies with a named download ticket and small domain metadata. The ticket owns the source.</summary>
+  public void ReplyDownload(IpcCommand command, string eventName, IpcDownloadSource source, object metadata = null)
+  {
+    if (command == null) throw new ArgumentNullException(nameof(command));
+    if (command.Namespace != Name) throw new ArgumentException("The command belongs to another namespace.", nameof(command));
+    if (!IpcNameValidator.IsValidMethod(eventName)) throw new ArgumentException("Invalid download event name.", nameof(eventName));
+    _registry.CreateDownload(this, command, source, eventName, metadata);
+  }
   public void MarkInitializing() => _registry.SetStatus(this, IpcNamespaceStatus.Initializing, null, null);
   public void MarkReady() => _registry.SetStatus(this, IpcNamespaceStatus.Ready, null, null);
   public void MarkError(string code, string message) => _registry.SetStatus(this, IpcNamespaceStatus.Error, code, message);

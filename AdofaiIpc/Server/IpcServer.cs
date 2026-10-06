@@ -114,9 +114,12 @@ public sealed class IpcServer
       if (_lifetime.IsCancellationRequested) return;
       string text = JsonConvert.SerializeObject(message);
       int bytes = Encoding.UTF8.GetByteCount(text);
+      // An invalid mod response is not backpressure from the consuming app.
+      // Fail only that operation and keep subscriptions and other commands alive.
+      if (bytes > IpcProtocol.MaxMessageBytes) throw new IpcMessageTooLargeException(bytes);
       int total = Interlocked.Add(ref _queuedBytes, bytes);
       int count = Interlocked.Increment(ref _count);
-      if (bytes > IpcProtocol.MaxMessageBytes || total > 8 * 1024 * 1024 || count > 256)
+      if (total > 8 * 1024 * 1024 || count > 256)
       { Interlocked.Add(ref _queuedBytes, -bytes); Interlocked.Decrement(ref _count); CloseAsync(1013, "IPC consumer is too slow; reconnect to synchronize."); return; }
       _outgoing.Enqueue(text); Drain();
     }

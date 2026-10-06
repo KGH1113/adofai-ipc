@@ -24,6 +24,20 @@ internal static class Program
     ns.RegisterCommand("denied.work", cmd => cmd.Reject("bad_level", "Pick another level."));
     ns.RegisterCommand("denied.details", cmd => cmd.Reject("invalid_field", "Choose a valid output.", new { field = "outputDirectory", row = 2 }));
     ns.RegisterDownloadCommand("level.download", cmd => new IpcDownloadSource(new MemoryStream(Encoding.UTF8.GetBytes("a level file")), 12, "test.adofai"));
+    string largeChart = "{\"comment\":\"" + new string('한', IpcProtocol.MaxMessageBytes) + "\"}";
+    ns.RegisterCommand("chart.inline", cmd => cmd.Reply("chart.snapshot", new { levelText = largeChart }));
+    ns.RegisterCommand("chart.stream", cmd => ns.ReplyDownload(cmd, "chart.snapshot",
+      new IpcDownloadSource(destination => {
+        using var writer = new StreamWriter(destination, new UTF8Encoding(false), 64 * 1024, leaveOpen: true);
+        writer.Write(largeChart);
+      }, Encoding.UTF8.GetByteCount(largeChart), "test.adofai", "application/json; charset=utf-8"),
+      new { LevelSessionId = "level-1", FloorCount = 4896 }));
+    var failedTicketSources = new ConcurrentQueue<TrackedDownloadStream>();
+    ns.RegisterCommand("chart.bad-metadata", cmd => {
+      var source = new TrackedDownloadStream(); failedTicketSources.Enqueue(source);
+      ns.ReplyDownload(cmd, "chart.snapshot", new IpcDownloadSource(source, 0, "test.adofai"), new { inline = largeChart });
+    });
+    ns.RegisterCommand("connection.check", cmd => cmd.Reply("connection.checked", new { }));
     ns.RegisterCommand("peer.challenge", cmd => ns.SendCommandToPeer(cmd.PeerId, "peer.answer", new { input = 42 }));
     ns.PeerEvent += evt => { if (evt.Name == "peer.answered") ns.SendToPeer(evt.PeerId, "peer.verified", evt.Payload, evt.CorrelationId); };
     ns.PeerSubscribed += peer => ns.SendToPeer(peer.PeerId, "state.snapshot", new { revision = 1 });
@@ -72,6 +86,37 @@ internal static class Program
       Check(response.IsSuccessStatusCode && await response.Content.ReadAsStringAsync() == "a level file", "stream download bytes");
       Check(response.Headers.GetValues("Access-Control-Allow-Origin").Single() == "https://allowed.example", "download CORS");
       Check((await http.GetAsync((string)ticket.Payload["url"])).StatusCode == HttpStatusCode.NotFound, "single-use download");
+      // Oversized output fails its command without destroying the connection.
+      for (int i = 0; i < 3; i++)
+      {
+        string id = "large-inline-" + i;
+        await client.Send("command", "test-mod", "chart.inline", id);
+        await client.Next("command.accepted");
+        var failed = await client.Next("command.failed");
+        Check(failed.CorrelationId == id && (string)failed.Payload["code"] == "message_too_large", "oversized response failure correlation");
+      }
+      try { ns.Publish("chart.changed", new { levelText = largeChart }); throw new Exception("Oversized publication was accepted."); }
+      catch (IpcMessageTooLargeException error) { Check(error.ByteLength > error.MaxByteLength, "publication size diagnostics"); }
+      await client.Send("command", "test-mod", "chart.bad-metadata", "bad-ticket");
+      await client.Next("command.accepted");
+      var failedTicket = await client.Next("command.failed");
+      Check(failedTicket.CorrelationId == "bad-ticket" && (string)failedTicket.Payload["code"] == "message_too_large", "oversized download metadata failure");
+      Check(failedTicketSources.Single().Disposed, "unsent ticket retained its download source");
+      await client.Send("command", "test-mod", "chart.stream", "large-stream");
+      await client.Next("command.accepted");
+      var chartTicket = await client.Next("chart.snapshot");
+      Check(chartTicket.CorrelationId == "large-stream" && (int)chartTicket.Payload["metadata"]["FloorCount"] == 4896, "named download metadata and correlation");
+      Check(Encoding.UTF8.GetByteCount(JsonConvert.SerializeObject(chartTicket)) < 1024, "chart bytes leaked into control message");
+      var chartRequest = new HttpRequestMessage(HttpMethod.Get, (string)chartTicket.Payload["url"]); chartRequest.Headers.Add("Origin", "https://allowed.example");
+      using var chartResponse = await http.SendAsync(chartRequest);
+      byte[] chartBytes = await chartResponse.Content.ReadAsByteArrayAsync();
+      Check(chartResponse.IsSuccessStatusCode && chartBytes.LongLength == (long)chartTicket.Payload["byteLength"] && Encoding.UTF8.GetString(chartBytes) == largeChart, "large UTF-8 chart download");
+      Check(chartResponse.Headers.GetValues("Access-Control-Allow-Origin").Single() == "https://allowed.example", "named download CORS");
+      Check((await http.GetAsync((string)chartTicket.Payload["url"])).StatusCode == HttpStatusCode.NotFound, "named download single-use ticket");
+      await client.Send("command", "test-mod", "connection.check", "still-connected");
+      await client.Next("command.accepted");
+      Check((await client.Next("connection.checked")).CorrelationId == "still-connected", "large transfers disconnected other commands");
+      Console.WriteLine("PASS: oversized results preserve connections; named tickets stream >6MiB UTF-8 charts with metadata and CORS.");
       using var forbidden = await Socket.Connect(server.Port, "https://forbidden.example");
       await forbidden.Next("connection.welcome"); await forbidden.Send("subscribe", "test-mod", "namespace.subscribe", "forbidden1");
       Check((string)(await forbidden.Next("command.rejected")).Payload["code"] == "origin_not_allowed", "origin authorization");
@@ -94,6 +139,12 @@ internal static class Program
       Console.WriteLine("PASS: real WebSocket lifecycle, commands/events, dedup, origins, streamed tickets, unload cancellation, local peer.");
     }
     finally { server.Stop(); }
+  }
+
+  private sealed class TrackedDownloadStream : MemoryStream
+  {
+    public bool Disposed;
+    protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
   }
 
   static void CheckInvalidOperation(Action action, string detail)
