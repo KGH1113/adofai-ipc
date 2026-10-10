@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <ProductVersion>1.0.0</ProductVersion>
+    <ProductVersion>2.0.0</ProductVersion>
     <ProductVersionCore>$([System.Text.RegularExpressions.Regex]::Replace('$(ProductVersion)', '-.*$', ''))</ProductVersionCore>
     <Version>$(ProductVersion)</Version>
     <VersionPrefix>$(ProductVersionCore)</VersionPrefix>
@@ -14,10 +14,5 @@
     <AdofaiManaged Condition="'$(AdofaiManaged)' == '' and '$(ADOFAI_MANAGED)' != ''">$(ADOFAI_MANAGED)</AdofaiManaged>
     <AdofaiManaged Condition="'$(AdofaiManaged)' == ''">$(AdofaiDir)/ADanceOfFireAndIce.app/Contents/Resources/Data/Managed</AdofaiManaged>
 
-    <AdofaiMods Condition="'$(AdofaiMods)' == '' and '$(ADOFAI_MODS_DIR)' != ''">$(ADOFAI_MODS_DIR)</AdofaiMods>
-    <AdofaiMods Condition="'$(AdofaiMods)' == ''">$(AdofaiDir)/Mods</AdofaiMods>
-
-    <UnityModManagerDll Condition="'$(UnityModManagerDll)' == ''">$(AdofaiManaged)/UnityModManager/UnityModManager.dll</UnityModManagerDll>
-    <HarmonyDll Condition="'$(HarmonyDll)' == ''">$(AdofaiManaged)/UnityModManager/0Harmony.dll</HarmonyDll>
   </PropertyGroup>
 </Project>

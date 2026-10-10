@@ -2,7 +2,7 @@
 
 [목차](000-DevelopGuide.md) | [English](../en/005-JsClient.md)
 
-v1 준비 중에는 npm 패키지 없이 원본 소스를 소비합니다.
+v2 개발 중에는 npm 패키지 없이 원본 소스를 소비합니다.
 
 ```bash
 ./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc

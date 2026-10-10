@@ -3,8 +3,8 @@
 [Guide](000-DevelopGuide.md) | [한국어](../kor/003-MessageProtocol.md)
 
 Endpoint: `ws://127.0.0.1:32145/ipc/ws` (fallback ports through32155).
-Subprotocol: `adofai-ipc.v3`. Product version1.0.0; wire version3. SDK/runtime compatibility
-uses the wire version; individual namespaces negotiate their own domain protocol in payload.
+Subprotocol: `adofai-ipc.v3`. Product version 2.0.0; wire version 3. SDK/runtime compatibility
+uses the wire version. Namespace lifecycle payloads expose featureProtocolMajor for independent domain compatibility.
 
 Every control message is one UTF-8 JSON text message:
 

@@ -30,6 +30,11 @@ public sealed class IpcLocalPeer : IDisposable, IIpcPeer
     ThrowIfClosed(); lock (_subscriptionsSync) _subscriptions.Add(ns);
     _registry.Receive(this, IpcPeerMessage.Create("subscribe", ns, null, null));
   }
+  public void Unsubscribe(string ns)
+  {
+    ThrowIfClosed(); lock (_subscriptionsSync) _subscriptions.Remove(ns);
+    _registry.Receive(this, IpcPeerMessage.Create("unsubscribe", ns, null, null));
+  }
   public string SendCommand(string ns, string name, object payload)
   { ThrowIfClosed(); var message = IpcPeerMessage.Create("command", ns, name, payload); _registry.Receive(this, message); return message.Id; }
   public void SendEvent(string ns, string name, object payload, string correlationId = null)

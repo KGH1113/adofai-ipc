@@ -9,7 +9,7 @@ source "$TASK_DIR/../../lib/guards.sh"
 
 require_file "$DOTNET_EXE"
 require_dir "$ADOFAI_MANAGED"
-require_file "$UNITY_MOD_MANAGER_DLL"
-require_file "$HARMONY_DLL"
-require_file "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/Info.json"
+require_file "$ADOFAI_MANAGED/UnityEngine.CoreModule.dll"
+require_file "$ADOFAI_MANAGED/Newtonsoft.Json.dll"
+require_file "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/manifest.json"
 require_command node

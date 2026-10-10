@@ -2,65 +2,62 @@
 
 [목차](000-DevelopGuide.md) | [English](../en/002-ModApi.md)
 
-모드마다 namespace 하나를 등록합니다. 새 handle은 initializing으로 시작합니다. 같은 namespace를
-다시 등록하면 기존 handle을 취소하고 handler와 티켓을 제거한 뒤 새 handle을 만듭니다.
-handler를 모두 다시 등록하세요. 같은 command 이름의 재등록은 해당 handler를 교체합니다.
+소비 모드는 Contracts와 Loader만 참조합니다. 공용 계약에는 Unity·Newtonsoft.Json·모드 DTO 타입이 없습니다.
+IPC 어댑터에서 도메인 payload를 JSON으로 직렬화합니다.
 
 ```csharp
-using AdofaiIpc;
+using System.Threading.Tasks;
+using AdofaiIpc.Contracts;
+using AdofaiIpc.Loader;
+using Newtonsoft.Json.Linq;
 
-var ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace("example-mod", new IpcNamespaceInfo {
-    DisplayName = "Example Mod", Version = "1.0.0",
-    AllowedOrigins = new[] { "https://example.com", "http://localhost", "http://127.0.0.1" }
-});
-ipc.RegisterMainThreadCommand("level.open", command => {
-    string levelId = (string)command.Payload["levelId"];
-    if (string.IsNullOrEmpty(levelId)) {
-        command.Reject("invalid_level", "Choose a level first.");
-        return;
-    }
-    OpenLevel(levelId); // application service; Unity work runs on the game thread
-    command.Reply("level.opened", new { levelId });
-});
-ipc.PeerSubscribed += peer =>
-    ipc.SendToPeer(peer.PeerId, "library.snapshot", new { revision = 1 });
-ipc.MarkReady();
+IIpcRuntime runtime = IpcLoader.GetRuntime(modsDirectory,
+    new RuntimeRequirements("2.0.0", requiredCapabilities: new[] { "commands", "game-thread" }));
 
-// On a domain change:
-ipc.Publish("library.changed", new { revision = 2 });
-// On disable/unload:
-AdofaiIpc.AdofaiIpc.UnregisterNamespace("example-mod");
+IFeatureRegistration registration = runtime.RegisterFeature(
+    new FeatureDescription("example-mod", "1.0.0", protocolMajor: 1),
+    feature => {
+        feature.OnCommand("level.open", IpcExecutionContext.GameThread, command => {
+            string id = (string)JObject.Parse(command.Json)["levelId"];
+            if (string.IsNullOrEmpty(id)) {
+                command.Reject("invalid_level", "레벨을 먼저 선택하세요.");
+                return Task.CompletedTask;
+            }
+            OpenLevel(id);
+            command.Reply("level.opened", new JObject { ["levelId"] = id }.ToString());
+            return Task.CompletedTask;
+        });
+        feature.OnClientAttached(client =>
+            client.Send("library.snapshot", "{\"revision\":1}"));
+    });
+registration.MarkReady();
+
+// 도메인 변경 시:
+registration.Publish("library.changed", "{\"revision\":2}");
+// 비활성화/unload 시:
+registration.Dispose();
 ```
 
-RegisterCommand는 background worker에서 실행하는 Action<IpcCommand>, RegisterAsyncCommand는
-Func<IpcCommand,Task>를 받습니다. Unity를 접근하는 RegisterMainThreadCommand는 게임 스레드에
-작업을 큐잉합니다. handler는 Reply, Reject 또는 Publish로 실제 도메인 결과를 표현해야 합니다.
-Reject(code,message,details)는 필드 이름·행 번호 같은 도메인 검증 정보를 함께 전달합니다.
-사용자 안내는 message에, 구조화한 데이터는 details에 두세요.
-accepted는 실행을 허용했다는 뜻입니다. 완료를 의미하지 않습니다. 예외는 command.failed를
-보내며, handler가 반환한 것만으로 자동 결과 이벤트를 만들지는 않습니다.
+등록은 initializing으로 시작합니다. 같은 기능 이름을 중복 등록하면 기존 등록을 교체하지 않고 실패합니다.
+configure에서 예외가 발생하면 해당 등록만 해제합니다. builder는 configure 중에만 사용합니다.
+Dispose는 여러 번 호출해도 안전하며 명령 token·티켓을 취소하고 unavailable을 알립니다.
+다시 켤 때는 새로 등록합니다.
 
-IpcCommand의 Id, Namespace, Name, PeerId, ConnectionId, Origin, JObject Payload,
-CancellationToken을 사용합니다. peer identity는 서버가 정합니다. 연결 종료나 namespace 해제는
-token을 취소합니다. 작업·lease·권한 token을 peer에 묶는 정책은 애플리케이션에서 구현합니다.
+OnCommand는 비동기 handler를 받습니다. GameThread는 최초 호출 스레드만 선택하며 Background는 worker를 사용합니다.
+Reply는 명령 ID를 correlationId로 가진 이름 있는 결과를 요청한 client에 보냅니다.
+Reject의 세 번째 detailsJson 인자로 구조화한 오류를 보낼 수 있습니다.
+accepted는 실행 허용이며 완료가 아닙니다. handler 예외는 command.failed로 전달합니다.
 
-Publish는 허용된 구독자에게 이벤트를 보냅니다. SendToPeer는 구독한 특정 peer에 이벤트를 보내며
-correlationId를 지정할 수 있습니다. SendCommandToPeer는 역방향 명령 ID를 반환합니다.
-그 결과는 PeerEvent의 CorrelationId로 연결합니다. 연결 종료·구독 해제 후 도착한 이벤트는
-그 peer에게 보내지 않고 건너뜁니다. 역방향 명령은 수신 peer가 없으면 실패합니다.
-유효하지 않은 handle, Origin 거부와 직렬화 오류는 숨기지 않습니다. PeerSubscribed에서 초기 snapshot을 보내고
-PeerDisconnected에서 소유 자원을 정리합니다. 구독 snapshot 콜백은 ready일 때 실행됩니다.
+OnClientAttached·OnClientDetached·OnEvent는 게임 스레드에서 실행합니다.
+Attached는 ready 뒤 호출되므로 최초 구독·재연결의 현재 snapshot을 보냅니다.
+command.Client의 서버가 정한 식별자로 소유권을 관리합니다.
+연결 종료·구독 해제·기능 Dispose·호스트 종료는 명령 token을 취소합니다.
+실행 중인 handler는 취소 token을 직접 관찰해야 합니다.
 
-namespace는 소문자·숫자·하이픈, command/event는 여기에 점도 사용합니다. AllowedOrigins는 구독과
-메시지를 제한합니다. 기본 포트 Origin을 허용하면 같은 scheme/host의 개발 포트도 허용하고,
-명시한 비기본 포트는 정확히 일치해야 합니다. Origin 없는 네이티브 peer는 허용하며 빈 목록은
-메시지 Origin을 제한하지 않습니다.
+Publish는 허용된 구독자에게, SendToPeer는 특정 구독자에게 이벤트를 보냅니다.
+SendCommandToPeer는 역방향 명령 ID를 반환하며 OnEvent의 CorrelationId로 결과를 연결합니다.
+CreateLocalPeer는 소켓 없이 같은 router를 사용합니다. Message를 설치한 뒤 Subscribe,
+SendCommand/SendEvent, Unsubscribe, Dispose합니다. Local Message는 worker에서 호출됩니다.
 
-같은 프로세스의 모드는 CreateLocalPeer(name)을 자체 port로 감싸 주입할 수 있습니다.
-Message listener를 먼저 등록한 뒤 Subscribe, SendCommand, SendEvent를 사용하고 Dispose합니다.
-동일한 router를 사용하므로 소켓이나 HTTP polling이 필요하지 않습니다.
-
-Local peer의 IsClosed는 IPC 중지나 peer 종료 후 true입니다. 중지된 peer를 재사용하지 말고
-연결 adapter에서 새 peer와 listener·구독을 만드세요. 종료된 peer에 메시지를 보내면
-ObjectDisposedException이 발생합니다. Dispose는 구독을 unavailable로 알리고 소유 자원을
-정리하므로 이전 세션의 이벤트가 새 세션에 영향을 주지 않도록 session identity를 확인하세요.
+기능 이름은 소문자·숫자·하이픈, 메시지 이름은 점도 허용합니다.
+AllowedOrigins로 접근을 제한하며 Origin 없는 native peer는 허용합니다.

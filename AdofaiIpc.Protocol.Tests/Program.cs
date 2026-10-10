@@ -5,16 +5,22 @@ using System.Text;
 using AdofaiIpc;
 using AdofaiIpc.Core;
 using AdofaiIpc.Server;
+using AdofaiIpc.Contracts;
+using AdofaiIpc.Runtime;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-internal static class Program
+internal static partial class Program
 {
   static void Check(bool condition, string detail) { if (!condition) throw new Exception(detail); }
   static async Task Main(string[] args)
   {
-    TestDiscardedDispatcherQueue();
-    TestDisconnectedEventDelivery();
+    if (!args.Contains("--serve"))
+    {
+      TestDiscardedDispatcherQueue();
+      TestDisconnectedEventDelivery();
+      await TestSharedRuntime();
+    }
     var queue = new ConcurrentQueue<Action>();
     var registry = new IpcRegistry(action => queue.Enqueue(action));
     var ns = registry.RegisterNamespace("test-mod", new IpcNamespaceInfo { Version = "1.0.0", AllowedOrigins = new[] { "https://allowed.example" } });

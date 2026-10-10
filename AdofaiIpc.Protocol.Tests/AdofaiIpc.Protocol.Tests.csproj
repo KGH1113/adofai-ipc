@@ -5,6 +5,8 @@
     <NoWarn>SYSLIB0014;SYSLIB0039;SYSLIB0045;CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../AdofaiIpc.Contracts/AdofaiIpc.Contracts.csproj" />
+    <Compile Include="../AdofaiIpc/Runtime/RoutedRuntime.cs" />
     <Reference Include="Newtonsoft.Json"><HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath></Reference>
     <Compile Include="../AdofaiIpc/IpcMessageTooLargeException.cs;../AdofaiIpc/IpcCommand.cs;../AdofaiIpc/IpcProtocol.cs;../AdofaiIpc/IpcPeerMessage.cs;../AdofaiIpc/AdofaiIpcNamespace.cs;../AdofaiIpc/IpcNamespaceInfo.cs;../AdofaiIpc/IpcNamespaceStatus.cs;../AdofaiIpc/IpcLocalPeer.cs;../AdofaiIpc/IpcDownloadSource.cs;../AdofaiIpc/IpcDownloadResponse.cs;../AdofaiIpc/IpcDownloadError.cs" />
     <Compile Include="../AdofaiIpc/Core/IpcRegistry.cs;../AdofaiIpc/Core/IIpcPeer.cs;../AdofaiIpc/Core/IpcNameValidator.cs;../AdofaiIpc/Core/IpcErrorCodes.cs;../AdofaiIpc/Core/IpcDownloadTicketStore.cs;../AdofaiIpc/Server/IpcServer.cs" />

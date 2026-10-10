@@ -8,10 +8,12 @@ namespace AdofaiIpc.Unity;
 internal sealed class MainThreadDispatcher : MonoBehaviour
 {
   private const int MaxActionsPerFrame = 64;
+  private const int MaxPendingActions = 1024;
 
   private static readonly ConcurrentQueue<Action> Pending = new();
   private static MainThreadDispatcher _instance;
   private static int _mainThreadId;
+  private static int _pendingCount;
 
   internal static bool IsMainThread =>
     Thread.CurrentThread.ManagedThreadId == _mainThreadId;
@@ -37,6 +39,11 @@ internal sealed class MainThreadDispatcher : MonoBehaviour
       return;
     }
 
+    if (Interlocked.Increment(ref _pendingCount) > MaxPendingActions)
+    {
+      Interlocked.Decrement(ref _pendingCount);
+      throw new InvalidOperationException("IPC game-thread queue is full.");
+    }
     Pending.Enqueue(action);
   }
 
@@ -44,6 +51,7 @@ internal sealed class MainThreadDispatcher : MonoBehaviour
   {
     while (Pending.TryDequeue(out _))
     {
+      Interlocked.Decrement(ref _pendingCount);
     }
 
     if (_instance != null)
@@ -55,22 +63,18 @@ internal sealed class MainThreadDispatcher : MonoBehaviour
     _mainThreadId = 0;
   }
 
-  private void OnApplicationQuit()
-  {
-    Main.Instance?.ShutdownForApplicationExit();
-  }
-
   private void Update()
   {
     for (int i = 0; i < MaxActionsPerFrame && Pending.TryDequeue(out Action action); i++)
     {
+      Interlocked.Decrement(ref _pendingCount);
       try
       {
         action();
       }
       catch (Exception e)
       {
-        Main.Instance?.LogException(e);
+        Debug.LogException(e);
       }
     }
   }

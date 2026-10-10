@@ -25,6 +25,8 @@ public sealed class AdofaiIpcNamespace
   { _registry.RegisterCommand(this, name, command => { handler(command); return Task.CompletedTask; }, true); }
   public void RegisterAsyncCommand(string name, Func<IpcCommand, Task> handler)
   { _registry.RegisterCommand(this, name, handler, false); }
+  internal void RegisterGameThreadAsyncCommand(string name, Func<IpcCommand, Task> handler)
+  { _registry.RegisterCommand(this, name, handler, true); }
   public void RegisterDownloadCommand(string name, Func<IpcCommand, object> handler)
   { RegisterCommand(name, command => _registry.CreateDownload(this, command, handler(command))); }
   /// <summary>Replies with a named download ticket and small domain metadata. The ticket owns the source.</summary>

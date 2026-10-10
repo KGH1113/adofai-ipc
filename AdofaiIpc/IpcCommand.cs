@@ -35,6 +35,7 @@ public sealed class IpcCommand
 
   public void Reject(string code, string message, object details)
   {
+    if (CancellationToken.IsCancellationRequested) return;
     if (Interlocked.Exchange(ref _rejected, 1) != 0) return;
     object payload = details == null ? (object)new { code, message } : new { code, message, details };
     _peer.Send(IpcPeerMessage.Create("rejected", Namespace, "command.rejected", payload, Id));

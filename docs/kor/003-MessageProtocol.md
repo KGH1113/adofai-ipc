@@ -3,8 +3,8 @@
 [목차](000-DevelopGuide.md) | [English](../en/003-MessageProtocol.md)
 
 주소는 `ws://127.0.0.1:32145/ipc/ws`이며32155까지 대체 포트를 사용합니다.
-subprotocol은 `adofai-ipc.v3`, 제품 버전1.0.0, wire version3입니다. SDK와 런타임은 wire version을
-검증하며 각 namespace의 도메인 protocol version은 payload에서 별도로 협상합니다.
+subprotocol은 `adofai-ipc.v3`, 제품 버전 2.0.0, wire version 3입니다. SDK와 런타임은 wire version을
+검증하며 namespace 수명 payload의 featureProtocolMajor로 도메인 호환성을 별도로 판단합니다.
 
 UTF-8 JSON text message 하나가 제어 메시지 하나입니다.
 

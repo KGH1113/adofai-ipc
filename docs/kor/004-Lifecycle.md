@@ -2,31 +2,25 @@
 
 [목차](000-DevelopGuide.md) | [English](../en/004-Lifecycle.md)
 
-initializing 중 handler와 peer listener를 등록하고 데이터를 준비한 뒤 MarkReady하세요.
-초기화 실패는 MarkError(code,message), 재초기화 시작은 MarkInitializing으로 표시합니다.
-ready 전에 명령은 실행되지 않습니다. 비활성화 시 UnregisterNamespace는 명령 token과 티켓을
-취소하고 unavailable을 알리며 소유 peer 정리를 유도합니다.
+프로세스 호스트가 persistent dispatcher 하나와 WebSocket 서버 하나를 소유합니다.
+소비 모드는 자기 기능 등록과 생성한 local peer만 소유합니다.
+처음 호출한 모드를 끄거나 모든 등록을 해제해도 호스트는 유지합니다.
+Unity quitting/unloading 때 호스트를 종료합니다.
 
-PeerSubscribed는 ready 수명 snapshot 뒤 실행됩니다. 모드가 없거나 초기화 중일 때 먼저 구독한
-peer도 MarkReady에서 hydrate합니다. client도 연결·ready 대기 전에 snapshot/event/command
-listener를 설치하세요. snapshot과 delta의 revision은 각 도메인이 책임집니다.
+configure에서 handler와 listener를 설치하고 도메인 상태 준비 후 MarkReady합니다.
+MarkInitializing으로 재초기화, MarkError로 실패를 알립니다.
+ready 전환과 재연결 때 현재 snapshot을 보내고 변경 명령은 재전송하지 않습니다.
 
-일반 handler와 PeerSubscribed/PeerDisconnected/PeerEvent는 Unity main thread 밖에서
-실행될 수 있습니다. 이벤트에서 Unity를 만질 때는 주입한 dispatcher를 사용하세요.
-RegisterMainThreadCommand만 자동으로 게임 스레드를 선택합니다. 그 안에서는 짧은 작업만
-실행하고 다운로드·압축·네트워크·대기는 background로 옮겨 frame을 막지 마세요.
+명령은 Background 또는 GameThread를 선택합니다. async 이후 continuation이 게임 스레드를
+유지한다고 가정하지 마세요. Unity 접근 시 runtime.RunOnGameThread를 사용합니다.
+기능 lifecycle/event 콜백은 게임 스레드, local peer Message는 worker에서 실행합니다.
+Dispose나 취소 콜백에서 게임 스레드를 기다리며 block하지 마세요.
+dispatcher는 최대 1024개 대기 작업과 프레임당 64개 실행으로 제한합니다.
 
-재연결은 peer/connection ID를 바꾸고 구독을 복원하며 새 snapshot을 받습니다. 명령은 자동
-재전송하지 않습니다. 기존 작업의 실패·취소·복구는 application session에서 처리합니다.
-wire mismatch는 재시도를 멈춥니다. 최초 서버 부재는 UNAVAILABLE이므로 앱 supervisor에서
-초기 연결 재시도 정책을 구현하세요.
+기능 Dispose는 대기 명령을 즉시 취소하며 나중에 큐가 실행돼도 취소한 명령은 실행되지 않습니다.
+실행 중인 명령은 실제 종료까지 공간을 유지하므로 CancellationToken을 직접 확인합니다.
+미사용 다운로드 티켓도 폐기합니다. 모드가 만든 local peer는 비활성화 때 직접 Dispose합니다.
+공용 호스트가 계속 살아 있다고 소비 모드의 peer를 남겨 두지 마세요.
 
-렌더링 같은 작업의 lease, virtual clock, input gate, frame ACK는 전송 heartbeat와 별도로
-유지합니다. 파일 소비가 끝나야 다음 frame을 만들 수 있다면 in-flight1을 지키세요.
-UI 프로세스가 이미 종료돼도 close/dispose에서 gate와 파일·자원을 정리해야 합니다.
-
-구독 해제도 해당 구독에서 받은 명령 token을 취소합니다. 아직 실행되지 않은 명령은
-취소 시 admission 공간을 즉시 반환하고 나중에 dispatcher가 호출해도 실행하지 않습니다.
-이미 실행 중인 handler는 CancellationToken을 관찰해야 하며 실제 종료까지 공간을 유지합니다.
-IPC 자체가 중지되면 외부 소켓과 local peer를 모두 종료하고 먼저 명령을 취소한 뒤
-게임 스레드 dispatcher를 종료합니다. 다시 켜진 IPC에는 새 local peer를 연결하세요.
+도메인 revision·소유권·lease·timeout·복구 정책은 애플리케이션이 책임집니다.
+파일·네트워크·압축·긴 작업은 게임 스레드에서 수행하지 않습니다.

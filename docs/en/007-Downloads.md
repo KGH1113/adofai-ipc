@@ -2,50 +2,34 @@
 
 [Guide](000-DevelopGuide.md) | [한국어](../kor/007-Downloads.md)
 
-Create a ticket with a WebSocket command and transfer file bytes through the HTTP stream:
+A named command result carries a one-use HTTP download ticket instead of embedding file bytes.
 
 ```csharp
-ipc.RegisterDownloadCommand("recording.export", command => {
-    // Resolve a domain ID through storage; do not accept an arbitrary filesystem path.
-    var file = recordings.Find((string)command.Payload["recordingId"]);
-    if (file == null) return new IpcDownloadError("recording_missing", "Record again.");
-    return new IpcDownloadSource(file.OpenRead(), file.ByteLength, "recording.wav", "audio/wav");
+feature.OnCommand("recording.export", IpcExecutionContext.Background, command => {
+    var file = recordings.Find((string)JObject.Parse(command.Json)["recordingId"]);
+    if (file == null) {
+        command.Reject("recording_missing", "Record again.");
+        return Task.CompletedTask;
+    }
+    command.ReplyDownload("recording.ready", file.OpenRead(), file.ByteLength,
+        "recording.wav", "audio/wav", "{\"revision\":1}");
+    return Task.CompletedTask;
 });
 ```
 
-The handler returns IpcDownloadSource or IpcDownloadError. A public callback constructor accepts
-Action<Stream>, byteLength, fileName, contentType; IpcDownloadResponse remains a convenience.
-The writer runs on an HTTP worker when consumed, writes exactly the declared length, and leaves
-the supplied response stream open. It must not read Unity objects there. Source streams are owned
-and disposed by the ticket/download lifecycle.
+ReplyDownload accepts either a readable Stream or Action<Stream>. The runtime takes ownership
+of the source, including failure/cancellation paths. A writer runs on an HTTP worker and must
+write exactly byteLength without closing the supplied response stream or reading Unity objects.
 
-The issuer receives the correlated event `download.ready` with lowercase `{url,byteLength}`.
-Open url as an attachment link for native browser saving without a large JavaScript Blob. Fetch
-is also available to allowed web applications. Responses use bounded64KiB flushed chunks,
-Content-Disposition, X-Byte-Length, no-store and nosniff. Chunked transfer means Content-Length
-is absent; use the byteLength from the event for expected size/progress.
+The result has {url, byteLength, metadata} and the command correlationId. Keep metadata small.
+Download responses flush bounded 64 KiB chunks with Content-Disposition, X-Byte-Length,
+no-store and nosniff. Open the URL as an attachment or fetch it from an authorized browser.
 
-Tickets expire after60s, are consumed once, and are bounded to128 tickets and4 concurrent downloads.
-Namespace unload/server stop revokes pending sources. Ticket authorization uses a copied namespace
-Origin policy. Browser CORS read access is granted only after successful ticket consumption with
-an explicit matching allowlist; unrestricted/native tickets receive no CORS grant. Rejected Origin
-does not consume the ticket. Attachment navigation/native tools may omit Origin. Treat URLs as
-short-lived bearer capabilities and keep them scoped to the issuing peer's application flow.
+Tickets expire in 60 seconds, are one-use, and are limited to 128 tickets and 4 concurrent downloads.
+Feature disposal and host shutdown revoke pending tickets. Authorization uses a copied feature
+Origin allowlist; only an explicitly matched browser Origin gets CORS read access.
+A rejected Origin does not consume the ticket. Native/attachment requests may omit Origin.
+Treat URLs as temporary bearer capabilities belonging to the issuing application's flow.
 
-Domain handlers can keep a named outcome and attach small metadata to the same ticket:
-
-```csharp
-ipc.RegisterCommand("chart.read", command => {
-    var chart = charts.Find((string)command.Payload["id"]);
-    ipc.ReplyDownload(command, "chart.snapshot", chart.OpenDownload(),
-        new { chart.Id, chart.FloorCount });
-});
-```
-
-The named outcome contains `{url, byteLength, metadata}` and the command's correlationId.
-Metadata is bounded control data; file contents belong only in the download stream.
-ReplyDownload requires a command from the same namespace and transfers ownership of the source
-to the ticket lifecycle. If the outcome cannot be sent, its ticket is revoked and the source disposed.
-An oversized outgoing control message throws IpcMessageTooLargeException. During command
-execution it becomes a correlated `command.failed` with code `message_too_large`, keeping the
-connection and other subscriptions alive. Queue backpressure still closes a slow consumer.
+Oversized control results produce correlated command.failed/message_too_large without closing
+the connection. File bytes must remain in the stream.

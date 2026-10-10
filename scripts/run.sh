@@ -10,8 +10,8 @@ usage() {
 Usage: ./scripts/run.sh <command>
 
 Commands:
-  build    Build, test, and optionally install the mod
-  package  Build and verify the mod ZIP and checksum
+  build    Build and test the bundled DLLs (no game installation)
+  package  Build and verify the DLL bundle ZIP and checksum
   client   Check and test the npm client
   client-sync  Copy raw SDK source and provenance into a consumer vendor directory
   client-pack  Check and pack the npm client to ADOFAIIPC_CLIENT_PACK_DESTINATION
@@ -21,7 +21,7 @@ USAGE
 }
 
 case "${1:-help}" in
-  build) exec "$SCRIPTS_DIR/workflows/build-install.sh" ;;
+  build) exec "$SCRIPTS_DIR/workflows/build.sh" ;;
   package) exec "$SCRIPTS_DIR/workflows/package.sh" ;;
   client) exec "$SCRIPTS_DIR/workflows/client.sh" ;;
   client-sync) shift; exec node "$SCRIPTS_DIR/tasks/client/sync-source.mjs" "$@" ;;

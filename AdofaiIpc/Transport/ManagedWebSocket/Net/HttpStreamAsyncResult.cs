@@ -175,7 +175,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
           _waitHandle.Set ();
 
         if (_callback != null)
-          _callback.BeginInvoke (this, ar => _callback.EndInvoke (ar), null);
+          ThreadPool.QueueUserWorkItem (_ => _callback (this));
       }
     }
 
@@ -192,7 +192,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
           _waitHandle.Set ();
 
         if (_callback != null)
-          _callback.BeginInvoke (this, ar => _callback.EndInvoke (ar), null);
+          ThreadPool.QueueUserWorkItem (_ => _callback (this));
       }
     }
 

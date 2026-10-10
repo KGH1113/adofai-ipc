@@ -280,6 +280,7 @@ public sealed class IpcRegistry
   }
   private static IpcPeerMessage StateMessage(string name, Entry e) => IpcPeerMessage.Create("namespace", name, "namespace.changed", new {
     status = e == null ? "unavailable" : StatusName(e.Status), version = e?.Handle.Info.Version,
+    featureProtocolMajor = e?.Handle.Info.ProtocolMajor,
     error = e?.ErrorCode == null ? null : new { code = e.ErrorCode, message = e.ErrorMessage } });
   private static string StatusName(IpcNamespaceStatus value) => value == IpcNamespaceStatus.Ready ? "ready" : value == IpcNamespaceStatus.Error ? "error" : "initializing";
   private static void Reject(IIpcPeer peer, IpcPeerMessage message, string code, string reason)

@@ -5,21 +5,15 @@ TASK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TASK_DIR/../../lib/context.sh"
 source "$TASK_DIR/../../lib/guards.sh"
 
-for assembly in \
-  "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.dll" \
-  "$ADOFAIIPC_RUNTIME_SHIM_OUTPUT/AdofaiIpc.Shim.dll" \
-  "$ADOFAIIPC_LAUNCHER_OUTPUT/AdofaiIpc.Launcher.dll" \
-  "$ADOFAIIPC_BOOTSTRAP_OUTPUT/AdofaiIpc.Bootstrap.dll" \
-  "$ADOFAIIPC_SHIM_OUTPUT/AdofaiIpc.DependencyShim.dll" \
-  "$ADOFAIIPC_MIGRATION_OUTPUT/AdofaiIpc.Migration.dll"; do
-  require_file "$assembly"
-  if LC_ALL=C grep -aFq 'DefaultInterpolatedStringHandler' "$assembly"; then
+for assembly in AdofaiIpc.Contracts AdofaiIpc.Loader AdofaiIpc.Runtime; do
+  require_file "$ADOFAIIPC_RUNTIME_OUTPUT/$assembly.dll"
+  if LC_ALL=C grep -aFq 'DefaultInterpolatedStringHandler' "$ADOFAIIPC_RUNTIME_OUTPUT/$assembly.dll"; then
     fail "Unity-incompatible interpolated string handler reference in $assembly"
   fi
 done
-
-if LC_ALL=C grep -aFq '0Harmony' "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.dll"; then
-  fail "AdofaiIpc runtime unexpectedly references 0Harmony"
-fi
-
-printf 'Validated shipped assemblies do not reference the Harmony string handler.\n'
+for dependency in 0Harmony UnityModManager JALib; do
+  if LC_ALL=C grep -aFq "$dependency" "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.Runtime.dll"; then
+    fail "IPC runtime unexpectedly references $dependency"
+  fi
+done
+printf 'Validated Unity-compatible DLLs without mod-loader dependencies.\n'

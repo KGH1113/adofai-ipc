@@ -2,69 +2,61 @@
 
 [Guide](000-DevelopGuide.md) | [한국어](../kor/002-ModApi.md)
 
-Register one namespace per mod. A fresh registration begins in initializing state. Replacing
-a registration cancels the old handle, removes its handlers and tickets, and creates a fresh
-handle; register all handlers again. Registering an existing command name replaces that handler.
+Consumers reference only Contracts and Loader. The contract contains no Unity, Newtonsoft.Json
+or consumer DTO types. Serialize your domain payloads to JSON in the IPC adapter.
 
 ```csharp
-using AdofaiIpc;
+using System.Threading.Tasks;
+using AdofaiIpc.Contracts;
+using AdofaiIpc.Loader;
+using Newtonsoft.Json.Linq;
 
-var ipc = AdofaiIpc.AdofaiIpc.RegisterNamespace("example-mod", new IpcNamespaceInfo {
-    DisplayName = "Example Mod", Version = "1.0.0",
-    AllowedOrigins = new[] { "https://example.com", "http://localhost", "http://127.0.0.1" }
-});
-ipc.RegisterMainThreadCommand("level.open", command => {
-    string levelId = (string)command.Payload["levelId"];
-    if (string.IsNullOrEmpty(levelId)) {
-        command.Reject("invalid_level", "Choose a level first.");
-        return;
-    }
-    OpenLevel(levelId); // application service; Unity work runs on the game thread
-    command.Reply("level.opened", new { levelId });
-});
-ipc.PeerSubscribed += peer =>
-    ipc.SendToPeer(peer.PeerId, "library.snapshot", new { revision = 1 });
-ipc.MarkReady();
+IIpcRuntime runtime = IpcLoader.GetRuntime(modsDirectory,
+    new RuntimeRequirements("2.0.0", requiredCapabilities: new[] { "commands", "game-thread" }));
+
+IFeatureRegistration registration = runtime.RegisterFeature(
+    new FeatureDescription("example-mod", "1.0.0", protocolMajor: 1),
+    feature => {
+        feature.OnCommand("level.open", IpcExecutionContext.GameThread, command => {
+            string id = (string)JObject.Parse(command.Json)["levelId"];
+            if (string.IsNullOrEmpty(id)) {
+                command.Reject("invalid_level", "Choose a level first.");
+                return Task.CompletedTask;
+            }
+            OpenLevel(id);
+            command.Reply("level.opened", new JObject { ["levelId"] = id }.ToString());
+            return Task.CompletedTask;
+        });
+        feature.OnClientAttached(client =>
+            client.Send("library.snapshot", "{\"revision\":1}"));
+    });
+registration.MarkReady();
 
 // On a domain change:
-ipc.Publish("library.changed", new { revision = 2 });
+registration.Publish("library.changed", "{\"revision\":2}");
 // On disable/unload:
-AdofaiIpc.AdofaiIpc.UnregisterNamespace("example-mod");
+registration.Dispose();
 ```
 
-`RegisterCommand(name, Action<IpcCommand>)` runs on a background worker.
-`RegisterAsyncCommand(name, Func<IpcCommand,Task>)` supports background asynchronous work.
-`RegisterMainThreadCommand(name, Action<IpcCommand>)` queues work for the game thread.
-Every handler must describe its domain outcome with `Reply`, `Reject`, and/or published events.
-`Reject(code,message,details)` also preserves structured domain validation information, such as
-field names and row numbers. Keep user-facing text in message and machine-readable data in details.
-`accepted` means validated and admitted to execution, not completed. Exceptions produce
-`command.failed`. A handler that returns silently has no automatic domain result.
+Registration starts initializing. Duplicate feature names fail rather than replacing another
+mod's registration. A failed configure callback rolls back only that registration.
+The builder is valid only during configure. Dispose is idempotent and cancels command tokens,
+revokes tickets and publishes unavailable. Re-enable by creating a new registration.
 
-`IpcCommand` exposes Id, Namespace, Name, PeerId, ConnectionId, Origin, JObject Payload and
-CancellationToken. The peer identities are assigned by the server, never trusted from payload.
-Cancellation follows connection loss and namespace unload. Use it for long operations, and
-bind jobs, leases or privileged tokens to the peer in your application layer.
+OnCommand takes an asynchronous handler. GameThread selects the initial invocation thread;
+Background uses a worker. Reply sends a named event to the issuing client with the command ID
+as correlationId. Reject can include a third detailsJson argument. accepted is admission, not
+completion; a thrown handler error produces command.failed. Returning silently sends no result.
 
-`Publish(name,payload)` sends an event to all authorized subscribers. `SendToPeer(peerId,name,
-payload,correlationId)` sends an event to one subscribed peer. `SendCommandToPeer(peerId,name,
-payload)` initiates a reverse command and returns its ID. Consume its named replies through
-`PeerEvent`; correlate with CorrelationId. Events queued before disconnect or unsubscribe are safely dropped
-for that departed peer; reverse commands still fail when their recipient is absent. Invalid handles,
-Origin violations and serialization failures are not hidden. Subscribe to `PeerSubscribed` for hydration and
-`PeerDisconnected` for owner cleanup. Snapshot callbacks fire when the namespace is ready.
+OnClientAttached, OnClientDetached and OnEvent execute on the game thread. Attached fires only
+after readiness; use it to send the current snapshot for initial subscriptions and reconnects.
+Use command.Client identities for ownership. Cancellation follows disconnect, unsubscribe,
+feature disposal and host shutdown. Running handlers must observe their cancellation token.
 
-Namespace names use lowercase letters, digits and hyphens. Command/event names also allow dots.
-`AllowedOrigins` restricts subscription and messaging. A configured default-port origin permits
-the same scheme and host on development ports; an explicit non-default port is matched exactly.
-Native peers without Origin are allowed. An empty allowlist means unrestricted messaging.
+Publish broadcasts to authorized subscribers. SendToPeer targets one subscriber;
+SendCommandToPeer returns a reverse command ID. Replies arrive through OnEvent with CorrelationId.
+CreateLocalPeer returns the same router without socket I/O: install Message, then Subscribe,
+SendCommand/SendEvent, Unsubscribe and Dispose. Local Message runs on a worker.
 
-Same-process mods can use `AdofaiIpc.AdofaiIpc.CreateLocalPeer(name)`: install the Message listener,
-Subscribe(namespace), SendCommand or SendEvent, then Dispose. This uses the shared router and
-the same command/state contract without another socket or HTTP polling. Wrap it in an application
-port rather than making domain services reference the concrete local peer.
-
-A local peer exposes `IsClosed`. Once IPC stops or that peer closes, create a fresh peer,
-listeners and subscriptions in the connection adapter. Sending through a closed peer throws
-`ObjectDisposedException`. Dispose invalidates subscriptions with unavailable and releases peer
-ownership; use session identity to prevent callbacks from an old peer affecting its replacement.
+Feature names use lowercase letters, digits and hyphens; message names also allow dots.
+AllowedOrigins restricts messaging. Native peers without Origin remain allowed.

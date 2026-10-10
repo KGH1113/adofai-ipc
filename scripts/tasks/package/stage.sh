@@ -13,5 +13,4 @@ if [ -e "$ADOFAIIPC_PACKAGE_STAGE" ]; then
   safe_remove_tree "$ADOFAIIPC_PACKAGE_STAGE" "$ADOFAIIPC_PACKAGE_ROOT"
 fi
 mkdir -p "$ADOFAIIPC_PACKAGE_STAGE"
-copy_mod_artifacts "$ADOFAIIPC_PACKAGE_STAGE"
-copy_debug_symbols "$ADOFAIIPC_PACKAGE_STAGE"
+copy_bundle_artifacts "$ADOFAIIPC_PACKAGE_STAGE"

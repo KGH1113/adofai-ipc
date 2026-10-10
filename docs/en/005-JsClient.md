@@ -2,7 +2,7 @@
 
 [Guide](000-DevelopGuide.md) | [한국어](../kor/005-JsClient.md)
 
-The v1 SDK is not published to npm during this preparation. Generate a reproducible snapshot:
+The v2 SDK is not published to npm during this preparation. Generate a reproducible snapshot:
 
 ```bash
 ./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc

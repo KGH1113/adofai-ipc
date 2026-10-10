@@ -1491,15 +1491,20 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
 
     private void closeAsync (PayloadData payloadData, bool send, bool received)
     {
-      Action<PayloadData, bool, bool> closer = close;
+      queueAsync (() => close (payloadData, send, received));
+    }
 
-      closer.BeginInvoke (
-        payloadData,
-        send,
-        received,
-        ar => closer.EndInvoke (ar),
-        null
-      );
+    // Delegate BeginInvoke is unsupported on modern .NET. ThreadPool also works on Unity/Mono.
+    private void queueAsync (Action action)
+    {
+      ThreadPool.QueueUserWorkItem (_ => {
+        try { action (); }
+        catch (Exception ex) {
+          _log.Error (ex.Message);
+          _log.Debug (ex.ToString ());
+          error ("An exception has occurred during an asynchronous WebSocket operation.", ex);
+        }
+      });
     }
 
     private bool closeHandshake (
@@ -1986,7 +1991,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
         e = _messageEventQueue.Dequeue ();
       }
 
-      _message.BeginInvoke (e, ar => _message.EndInvoke (ar), null);
+      queueAsync (() => _message (e));
     }
 
     private bool ping (byte[] data)
@@ -2400,14 +2405,10 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
       Action<bool> completed
     )
     {
-      Func<Opcode, Stream, bool> sender = send;
-
-      sender.BeginInvoke (
-        opcode,
-        sourceStream,
-        ar => {
+      queueAsync (
+        () => {
           try {
-            var sent = sender.EndInvoke (ar);
+            var sent = send (opcode, sourceStream);
 
             if (completed != null)
               completed (sent);
@@ -2421,8 +2422,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
               ex
             );
           }
-        },
-        null
+        }
       );
     }
 
@@ -2666,6 +2666,12 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
                   message ();
                 },
                 ex => {
+                  // Pending reads may finish after a normal close disposes the stream.
+                  if (_readyState == WebSocketState.Closing || _readyState == WebSocketState.Closed) {
+                    try { _receivingExited?.Set (); }
+                    catch (ObjectDisposedException) { }
+                    return;
+                  }
                   _log.Fatal (ex.Message);
                   _log.Debug (ex.ToString ());
 
@@ -2745,18 +2751,15 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
     // As server
     internal void AcceptAsync ()
     {
-      Func<bool> acceptor = accept;
-
-      acceptor.BeginInvoke (
-        ar => {
-          var accepted = acceptor.EndInvoke (ar);
+      queueAsync (
+        () => {
+          var accepted = accept ();
 
           if (!accepted)
             return;
 
           open ();
-        },
-        null
+        }
       );
     }
 
@@ -3657,18 +3660,15 @@ namespace AdofaiIpc.Transport.ManagedWebSocket
         throw new InvalidOperationException (msg);
       }
 
-      Func<bool> connector = connect;
-
-      connector.BeginInvoke (
-        ar => {
-          var connected = connector.EndInvoke (ar);
+      queueAsync (
+        () => {
+          var connected = connect ();
 
           if (!connected)
             return;
 
           open ();
-        },
-        null
+        }
       );
     }
 

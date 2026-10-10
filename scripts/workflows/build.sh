@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKFLOW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(cd "$WORKFLOW_DIR/.." && pwd)"
+TASKS_DIR="$SCRIPTS_DIR/tasks"
+source "$SCRIPTS_DIR/lib/logging.sh"
+
+run_task "Validate local build inputs" "$TASKS_DIR/validate/local-build-inputs.sh"
+run_task "Validate product version" "$TASKS_DIR/validate/version.sh"
+run_task "Build runtime (Debug)" "$TASKS_DIR/build/runtime.sh" Debug
+
+run_task "Build local DLL loader (Debug)" "$TASKS_DIR/build/loader.sh" Debug
+run_task "Validate Unity runtime compatibility" "$TASKS_DIR/validate/runtime-compatibility.sh"
+run_task "Run C# tests" "$TASKS_DIR/test/csharp.sh"

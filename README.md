@@ -19,65 +19,70 @@
 
 ## Overview
 
-ADOFAI-IPC1.0.0은 ADOFAI 모드와 외부 앱이 함께 사용하는 양방향 WebSocket 게이트웨이입니다.
-각 모드는 namespace를 등록하고 양쪽 peer가 명령·이름 있는 결과·snapshot·상태 변경 이벤트를
-서로 보냅니다. wire protocol은3이며 기존 HTTP RPC API는 제거했습니다.
+ADOFAI-IPC 2.0.0은 ADOFAI 모드와 외부 앱을 연결하는 양방향 WebSocket 런타임입니다.
+각 모드는 DLL을 동봉하고 기능을 등록합니다. 서버는 게임 프로세스에 속하며 최초 호출 모드의
+비활성화와 무관하게 유지합니다. wire protocol은 3, 공용 C# 계약 major는 1입니다.
 
 ## Architecture
 
-한 UnityModManager 모드가 IPv4 loopback listener를 소유합니다. 기본32145부터32155까지
-선택하고 `ws://127.0.0.1:<port>/ipc/ws`, subprotocol `adofai-ipc.v3`를 사용합니다.
-서버 라우터는 peer·namespace·메시지 수명을, 소비 앱은 도메인 작업·revision·소유권을 책임집니다.
-Unity 작업은 main-thread command나 주입한 dispatcher에서 수행합니다.
+소비 모드는 Contracts와 Loader만 참조하고 런타임 구현을 직접 참조하지 않습니다.
+로더가 설치된 모든 `Mods/<mod>/ipc/manifest.json` 후보에서 호환되는 최신 안정 런타임을 선택합니다.
+선택은 첫 시작 전에 끝내며 게임 종료까지 고정합니다. 늦게 켠 비호환 모드는 자신의 등록만 실패합니다.
 
-SDK/Unity/native 구현은 composition root에서 자체 port에 주입합니다. application/domain에서
-구체적인 transport나 UI framework에 의존하지 않도록 경계를 유지하세요.
+- 게임 프로세스 공용 호스트, WebSocket 서버 하나, Unity dispatcher 하나
+- 모드별 기능 등록·해제, 초기 snapshot과 상태 변경 이벤트
+- 양방향 명령, 이름 있는 결과, correlationId와 취소 token
+- 연결 종료·구독 해제·기능 해제에 따른 명령 취소와 다운로드 티켓 폐기
+- 같은 프로세스의 local peer도 공통 router 사용
+- IPv4 loopback 32145..32155, `ws://127.0.0.1:<port>/ipc/ws`, `adofai-ipc.v3`
+- 제어 메시지 2 MiB, 제한된 peer·명령·송신 큐, heartbeat
+- 파일은 1회용 HTTP 티켓과 64 KiB chunk 스트림
+- 게임 스레드 대기 큐 1024개, 프레임당 최대 64개 실행
 
-- namespace lifecycle과 초기 snapshot/변경 이벤트 push
-- 양방향 명령과 correlationId를 가진 이름 있는 결과 이벤트
-- 연결 종료·namespace 해제 시 명령 취소, 자동 재구독과 snapshot 복구
-- 최초 서버 부재도 지속 재탐색하며, ping/pong 응답이 없는 소켓과 페이지 이동 전 연결을 정리
-- 같은 게임 프로세스의 모드를 위한 공통 local-peer router
-- 메시지2MiB, 대기 큐·명령·peer 제한과 heartbeat
-- 큰 파일은 이름 있는 결과·작은 메타데이터와1회용 HTTP 티켓으로64KiB chunk 스트리밍
-- 송신 제어 메시지 크기 초과는 해당 명령만 실패시키고 연결·구독 유지
-- 기존 fixed dependency shim과 versioned bootstrap/update 설치 구조 유지
+별도 공용 라이브러리 모드, 자동설치, 의존 모드 활성화, 자체 업데이트, launcher, shim,
+migration 코드는 제거했습니다. `IFeatureRegistration.Dispose()`는 해당 기능만 해제합니다.
+호스트는 Unity application quitting/unloading에서 종료합니다.
 
-## Build and install
-
-v1 준비 중에는 로컬 소스로 작업합니다. 공개 릴리즈와 npm SDK 게시를 아직 수행하지 않습니다.
+## Build and package
 
 ```bash
 ./scripts/run.sh check
-./scripts/run.sh build                  # test + install into Mods/AdofaiIpc
-./scripts/run.sh client                 # build/typecheck/test; no npm publish
-./scripts/run.sh package                # mod ZIP + checksum validation
+./scripts/run.sh build                  # DLL 빌드 + C# 테스트; 게임에 설치하지 않음
+./scripts/run.sh client                 # TypeScript 빌드·타입 검사·테스트
+./scripts/run.sh package                # 동봉 DLL ZIP + checksum 검증
 ./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc
 ```
 
-설치 없이 검증하려면 `ADOFAIIPC_SKIP_INSTALL=1 ./scripts/run.sh build`를 사용합니다.
-설치 후 게임을 완전히 재시작하면 versioned runtime1.0.0을 사용합니다.
-`GET /ipc/health`는 진단용 HTTP endpoint입니다.
+기본 빌드 출력은 `build/ipc`, ZIP은 `build/AdofaiIpc-v2.zip`입니다.
+로컬 `.env`의 출력 경로 설정은 유지됩니다. 공개 릴리즈나 npm 게시를 수행하지 않습니다.
+ZIP을 소비 모드 폴더에 펼치면 다음 파일을 동봉하게 됩니다.
 
 ```text
-Mods/AdofaiIpc/
-  Info.json
-  AdofaiIpc.Shim.dll
-  AdofaiIpc.dll
-  Update/state.json
-  Launcher/versions/1.0.0/AdofaiIpc.Launcher.dll
-  Runtime/versions/1.0.0/AdofaiIpc.dll
+Mods/ExampleMod/
+  ExampleMod.dll
+  Info.json                            # 소비 모드 자신의 진입점
+  AdofaiIpc.Contracts.dll
+  AdofaiIpc.Loader.dll
+  ipc/
+    manifest.json
+    AdofaiIpc.Runtime.dll
 ```
+
+Contracts와 Loader의 AssemblyVersion은 계약 major 1에서 `1.0.0.0`으로 유지합니다.
+제품 버전·계약 major·wire major·기능별 메시지 major는 별도로 관리합니다.
+새 DLL은 게임 재시작 후 적용하며 실행 중 교체하지 않습니다.
 
 ## Documentation
 
 - [한국어 개발 가이드](docs/kor/000-DevelopGuide.md)
 - [English developer guide](docs/en/000-DevelopGuide.md)
-- [v1 preparation notes](docs/releases/v1.0.0.md)
-- [Dependency bootstrap](docs/en/006-DependencyBootstrap.md)
+- [동봉 런타임과 버전 계약](docs/kor/006-BundledRuntime.md)
+- [v2 구현과 검증](docs/releases/v2.0.0.md)
 
-## Runtime
+## Runtime and validation
 
-ADOFAI, UnityModManager와 netstandard2.1이 필요합니다. Newtonsoft.Json을 사용하며 pinned
-managed WebSocket 소스는 namespace를 격리해 런타임 DLL에 포함합니다. 게임의 미구현
-HttpListener WebSocket API와 별도 WebSocketSharp DLL에 의존하지 않습니다.
+ADOFAI의 Unity/Mono와 netstandard2.1을 대상으로 합니다. 게임의 Newtonsoft.Json을 사용하며
+managed WebSocket 소스를 런타임에 포함합니다. UnityModManager와 JALib에 의존하지 않습니다.
+
+자동 테스트는 .NET 8에서 버전 선택·공용 런타임 수명과 실제 WebSocket 통신을 검증합니다.
+실제 게임에서의 계약 DLL 통합 로딩과 Unity 종료 훅은 두 소비 모드로 추가 검증해야 합니다.

@@ -1,8 +1,0 @@
-{
-  "Id": "AdofaiIpc",
-  "DisplayName": "AdofaiIpc",
-  "Author": "impl",
-  "Version": "1.0.0",
-  "AssemblyName": "AdofaiIpc.Shim.dll",
-  "EntryMethod": "AdofaiIpc.Shim.Shim.Load"
-}

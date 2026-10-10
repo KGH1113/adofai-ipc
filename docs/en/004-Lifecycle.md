@@ -2,33 +2,24 @@
 
 [Guide](000-DevelopGuide.md) | [한국어](../kor/004-Lifecycle.md)
 
-Register handlers and peer listeners while initializing. Complete data setup, then MarkReady.
-MarkError(code,message) reports initialization failure. MarkInitializing starts a later setup
-cycle. Commands are gated until ready. On disable, UnregisterNamespace cancels queued/running
-handler tokens, revokes tickets, publishes unavailable and triggers peer-owner cleanup.
+The process host owns one persistent dispatcher and one WebSocket server. Consumer mods own
+only feature registrations and any local peers they create. Disabling the first consumer or
+disposing every registration leaves the host alive. Unity quitting/unloading shuts it down.
 
-PeerSubscribed fires after the ready lifecycle snapshot; MarkReady also hydrates peers that
-subscribed while the mod was missing or initializing. Do not send initial state before installing
-the peer listeners. On the client, install snapshot/event/command listeners before connecting or
-awaiting readiness. Revisioned snapshots and deltas belong to the domain, not the generic SDK.
+Install commands and listeners during configure, prepare domain state, then MarkReady.
+MarkInitializing begins another setup cycle; MarkError reports failure. Ready transitions
+hydrate current subscribers. Reconnects receive snapshots without replaying mutating commands.
 
-Command workers, PeerSubscribed, PeerDisconnected and PeerEvent can run away from the Unity main
-thread. Use an injected dispatcher for Unity access in lifecycle/event callbacks. Only
-RegisterMainThreadCommand selects the game thread automatically. Keep these handlers short;
-background downloads, archive work, waits and socket I/O must not block a frame.
+Command handlers select Background or GameThread. Async continuations are not guaranteed to
+stay on the game thread: use runtime.RunOnGameThread after asynchronous work when touching Unity.
+Feature lifecycle/event callbacks use the game thread; local peer Message uses a worker.
+Dispose callbacks and cancellation callbacks must not block waiting for the game thread.
+Keep work short. The dispatcher admits at most 1024 queued actions and drains 64 per frame.
 
-On reconnect, the SDK reopens a connection with new identities, resubscribes, invalidates old
-namespace readiness, and receives new snapshots. It never replays commands. Pending domain
-operations must be rejected/cancelled or reconciled by the application session. Terminal wire
-mismatch stops retrying; initial absence is UNAVAILABLE and the application supervisor may retry.
+Feature disposal cancels queued commands immediately; a queued callback cannot later execute
+cancelled work. Running commands retain their admission slot until completion and must observe
+CancellationToken. Disposal revokes unconsumed download tickets. Local peer lifetime is explicit:
+dispose peers owned by a consumer when it disables, even though the shared host remains alive.
 
-Keep operation ownership distinct from connection heartbeat. For example, a render session may
-need its own lease, virtual clock, input gate and frame acknowledgment. Allow only one frame in
-flight if file consumption must finish before the next frame is produced. Close/dispose must
-restore any gate and release owned files/resources even when the UI process has already exited.
-
-Unsubscribing also cancels commands admitted through that subscription. A cancelled command
-that has not started immediately returns its admission slot and cannot run through a later
-dispatcher callback. A running handler must observe CancellationToken and retains its slot
-until execution ends. Stopping IPC closes both socket and local peers and cancels their work
-before shutting down the game-thread dispatcher. Recreate local peers when IPC starts again.
+Domain revisions, ownership, leases, timeouts and recovery policies belong to the application.
+Do not perform filesystem, network, archive or long-running work on the game thread.

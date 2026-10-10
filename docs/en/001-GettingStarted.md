@@ -2,21 +2,34 @@
 
 [Guide](000-DevelopGuide.md) | [한국어](../kor/001-GettingStarted.md)
 
-The runtime requires ADOFAI and UnityModManager. It targets netstandard2.1 and embeds an
-isolated managed WebSocket implementation. The game's Mono HttpListener WebSocket upgrade
-API is not used because its implementation throws NotImplementedException.
+Build with `./scripts/run.sh build`. This builds the DLLs and runs tests without installing
+anything into the game. `./scripts/run.sh package` produces a bundle ZIP and SHA-256 checksum.
+The runtime targets netstandard2.1 and embeds its managed WebSocket transport.
 
-During v1 preparation, build the local source with `./scripts/run.sh build`. This validates
-assemblies and tests, then installs under the configured `Mods/AdofaiIpc` directory. Set
-`ADOFAIIPC_SKIP_INSTALL=1` to validate without installing. `./scripts/run.sh package` produces
-and verifies the mod ZIP and checksum. These commands do not publish a release.
+Reference AdofaiIpc.Contracts.dll and AdofaiIpc.Loader.dll in your mod project.
+Do not reference AdofaiIpc.Runtime.dll: it must be loaded only after candidate selection.
+Copy the bundle contents into your own mod's directory:
 
-The server binds IPv4 loopback only. It tries ports 32145 through 32155. Connect to
-`ws://127.0.0.1:<port>/ipc/ws` with subprotocol `adofai-ipc.v3`. The SDK scans those WebSocket
-ports directly and validates the welcome message. `GET /ipc/health` remains a diagnostic
-endpoint and returns server, serverVersion, protocolVersion and port.
+```text
+Mods/ExampleMod/
+  Info.json                       # Your mod's own entry point
+  ExampleMod.dll
+  AdofaiIpc.Contracts.dll
+  AdofaiIpc.Loader.dll
+  ipc/
+    manifest.json
+    AdofaiIpc.Runtime.dll
+```
 
-Reference the built `build/AdofaiIpc/AdofaiIpc.dll` in a consuming mod, require IPC1.0.0 in its
-bootstrap manifest, and ship the pinned dependency artifacts. The TypeScript SDK is currently
-consumed as a source snapshot; see [the SDK guide](005-JsClient.md). Do not publish it to npm
-as part of this preparation.
+The contract and loader are next to your mod assembly so the mod loader can resolve references.
+Use the game's Newtonsoft.Json; do not bundle another copy. The runtime uses only UnityEngine.CoreModule
+and Newtonsoft.Json from the game. There is no separate Mods/AdofaiIpc installation.
+
+Call IpcLoader.GetRuntime(modsDirectory, requirements) on the Unity game thread, where
+modsDirectory is the parent directory containing all installed mod directories.
+Register your feature and MarkReady after its domain state is prepared.
+
+The server binds IPv4 loopback ports 32145..32155. Connect to
+`ws://127.0.0.1:<port>/ipc/ws` with subprotocol `adofai-ipc.v3`.
+`GET /ipc/health` reports server, serverVersion, protocolVersion and port.
+See [version selection](006-BundledRuntime.md) and [the mod API](002-ModApi.md).
