@@ -46,14 +46,22 @@ IpcTransport port는 connect, send, close, onMessage, onClose를 제공합니다
 
 connection: namespace, onState, state, peerId, connectionId, close.
 state는 disconnected/connected/reconnecting/closed/incompatible이며 onState는 현재 값을
-즉시 알립니다. 성립된 연결은 jitter/backoff로 복구하고 재구독하지만 명령을 재전송하지 않습니다.
+즉시 알립니다. 최초 서버 부재도 reconnecting으로 들어가 jitter/backoff로 재탐색합니다.
+start()는 첫 탐색이 끝나면 반환하므로 실제 모드 준비는 channel.whenReady()로 기다립니다.
+동시에 호출한 start는 하나의 탐색을 공유하며, 복구 후 재구독하지만 명령을 재전송하지 않습니다.
+checkConnection()은 유지된 소켓의 응답을 확인하거나 대기 중인 재탐색을 깨웁니다.
+heartbeatIntervalMs(기본10000ms), heartbeatTimeoutMs(기본15000ms)로 ping/pong 응답을 확인해
+close 이벤트 없이 끊어진 소켓도 교체합니다. browser transport는 pagehide 때 소켓을 해제하고
+연결 후 error도 연결 종료로 처리합니다. close()는 진행 중인 탐색과 heartbeat timer를 취소합니다.
 
 channel: on, onCommand, send, emit, reply, onStatus, status, error, whenReady.
 send(name,payload,{id,signal})는 ID를 즉시 반환합니다. AbortSignal은 전송 전에만 검사합니다.
 이미 실행 중인 작업은 도메인 취소 명령으로 취소하세요. on/onCommand/onStatus의 반환 함수로
 listener를 해제합니다. 상관관계, 도메인 timeout, 연결 종료 시 작업 실패, projection은 앱이 맡습니다.
 
-최초 부재는 IpcUnavailableError(UNAVAILABLE), wire 불일치는 IpcProtocolMismatchError(INCOMPATIBLE).
+wire 불일치는 IpcProtocolMismatchError(INCOMPATIBLE)를 반환하고 재탐색을 중단합니다.
 whenReady는 polling 없이 상태 이벤트를 기다리며 기본15000ms 후 IpcTimeoutError(TIMEOUT),
-초기화 실패 시 모드 code를 가진 IpcNamespaceError를 반환합니다. isIpcUnavailable은 UNAVAILABLE만
-식별합니다. 최초 서버 발견 전의 재시도는 앱 supervisor, 성공 후 연결 복구는 SDK가 담당합니다.
+초기화 실패 시 모드 code를 가진 IpcNamespaceError를 반환합니다. 준비 대기 timeout 뒤에도 SDK는
+재탐색을 계속하므로 앱은 channel.onStatus의 ready 전환 때 읽기 상태를 복구해야 합니다.
+연결 없이 전송하거나 명시적으로 닫힌 연결을 시작하면 IpcUnavailableError(UNAVAILABLE)이며,
+isIpcUnavailable은 UNAVAILABLE만 식별합니다. 변경 명령은 재접속해도 자동 재전송하지 않습니다.

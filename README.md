@@ -36,6 +36,7 @@ SDK/Unity/native 구현은 composition root에서 자체 port에 주입합니다
 - namespace lifecycle과 초기 snapshot/변경 이벤트 push
 - 양방향 명령과 correlationId를 가진 이름 있는 결과 이벤트
 - 연결 종료·namespace 해제 시 명령 취소, 자동 재구독과 snapshot 복구
+- 최초 서버 부재도 지속 재탐색하며, ping/pong 응답이 없는 소켓과 페이지 이동 전 연결을 정리
 - 같은 게임 프로세스의 모드를 위한 공통 local-peer router
 - 메시지2MiB, 대기 큐·명령·peer 제한과 heartbeat
 - 큰 파일은 이름 있는 결과·작은 메타데이터와1회용 HTTP 티켓으로64KiB chunk 스트리밍

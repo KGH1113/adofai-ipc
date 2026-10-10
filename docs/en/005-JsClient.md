@@ -48,6 +48,12 @@ subprotocol and dispose probe connections/listeners on failure.
 Connection: namespace(name), onState(listener), state, peerId, connectionId, close(). States:
 disconnected, connected, reconnecting, closed, incompatible. Reconnect uses bounded jittered
 backoff and resubscribes without replay. onState immediately reports the current state.
+Initial server absence also enters reconnecting: start() completes after the first discovery
+round, while channel.whenReady() waits for the actual mod. Concurrent start calls share discovery.
+checkConnection() probes a retained socket or wakes a pending retry. Correlated ping/pong checks
+replace silently dead sockets (heartbeatIntervalMs defaults to 10000, heartbeatTimeoutMs to 15000).
+The browser transport releases its socket on pagehide and treats an error after open as a lost
+connection even if no close event arrives. close() cancels active discovery and heartbeat timers.
 
 Channel: on(name,callback), onCommand(name,callback), send(name,payload,{id,signal}), emit(name,
 payload), reply(correlationId,name,payload), onStatus(callback), status, error, whenReady({timeoutMs,
@@ -56,8 +62,9 @@ guards a send before transmission; cancel an already running operation with a do
 Unsubscribe functions release handlers. The application owns correlation, domain timeouts,
 disconnection rejection, retry policy and state projection.
 
-Initial absence throws IpcUnavailableError(codeUNAVAILABLE); wire mismatch throws
-IpcProtocolMismatchError(codeINCOMPATIBLE) and stops probing/retrying. whenReady is event driven;
-default timeout15000ms, IpcTimeoutError(codeTIMEOUT), or IpcNamespaceError(code from the mod).
-`isIpcUnavailable` matches UNAVAILABLE. The successful established connection reconnects itself,
-while an application supervisor handles retries before any server has been found.
+Wire mismatch throws IpcProtocolMismatchError(codeINCOMPATIBLE) and stops probing/retrying.
+whenReady is event driven; default timeout15000ms, IpcTimeoutError(codeTIMEOUT), or
+IpcNamespaceError(code from the mod). A readiness timeout does not stop discovery: applications
+must observe channel.onStatus and recover their read-only projections when the mod becomes ready.
+`isIpcUnavailable` matches UNAVAILABLE from sends without a connection or an explicitly closed
+connection. Mutating commands are never replayed after reconnecting.

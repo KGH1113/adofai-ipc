@@ -30,11 +30,65 @@ test("discovery closes failed probes and binds one persistent connection", async
   for (const { transport } of attempts.slice(0, 2)) { assert.equal(transport.closed, 1); assert.equal(transport.messages.size, 0); assert.equal(transport.closes.size, 0); }
   assert.equal(connection.state, "connected"); connection.close(); assert.equal(attempts[2].transport.messages.size, 0);
 });
-test("initially unavailable and protocol mismatch are distinct terminal outcomes", async () => {
-  await assert.rejects(connectIpc({ startPort: 32145, endPort: 32145, transportFactory: () => new Transport({ fail: true }) }), IpcUnavailableError);
+test("initial absence keeps discovering, while protocol mismatch stops retries", async t => {
+  let available = false; const probes = [];
+  const connection = await connectIpc({ startPort: 32145, endPort: 32145, transportFactory: () => {
+    const transport = new Transport({ fail: !available }); probes.push(transport); return transport;
+  } });
+  t.after(() => connection.close());
+  const channel = connection.namespace("test-mod");
+  assert.equal(connection.state, "reconnecting");
+  available = true;
+  await channel.whenReady({ timeoutMs: 1500 });
+  assert.equal(connection.state, "connected"); assert.equal(probes[0].closed, 1);
+  assert.equal(probes[1].sent.filter(message => message.kind === "subscribe").length, 1);
   const bad = new Transport({ protocol: 2 }); let mismatch;
   await assert.rejects(connectIpc({ startPort: 32145, endPort: 32145, transportFactory: () => bad, onProtocolMismatch: error => { mismatch = error; } }), IpcProtocolMismatchError);
   assert.equal(mismatch.code, "INCOMPATIBLE"); assert.equal(bad.closed, 1); assert.equal(bad.messages.size, 0);
+});
+test("concurrent start calls share one discovery and close cancels an unfinished socket", async () => {
+  const transport = new Transport(); let attempts = 0;
+  transport.connect = () => { attempts++; return new Promise(() => {}); };
+  const connection = new IpcConnection({ startPort: 32145, endPort: 32145, connectTimeoutMs: 10000, transportFactory: () => transport });
+  const first = connection.start(); const second = connection.start();
+  assert.equal(first, second); assert.equal(attempts, 1);
+  const rejected = assert.rejects(first, IpcUnavailableError);
+  connection.close(); await rejected;
+  assert.equal(transport.closed, 1); assert.equal(transport.messages.size, 0); assert.equal(transport.closes.size, 0);
+  assert.equal(connection.state, "closed");
+});
+test("a silently dead socket is replaced and old responses cannot hydrate the new session", async t => {
+  const instances = [];
+  const connection = await connectIpc({ startPort: 32145, endPort: 32145, heartbeatIntervalMs: 10, heartbeatTimeoutMs: 20,
+    transportFactory: () => {
+      const transport = new Transport({ onSend(message, tx) {
+        if (instances.length > 1 && message.kind === "ping") tx.receive(packet("pong", "connection.pong", {}, undefined, message.id));
+      } }); instances.push(transport); return transport;
+    }
+  });
+  t.after(() => connection.close());
+  const channel = connection.namespace("test-mod"); await channel.whenReady();
+  channel.send("dangerous.work", {}, { id: "do-not-repeat" });
+  const snapshots = []; channel.on("state.snapshot", payload => snapshots.push(payload));
+  await until(() => instances.length === 2 && connection.state === "connected");
+  await channel.whenReady();
+  instances[0].receive(packet("event", "state.snapshot", { stale: true }));
+  assert.deepEqual(snapshots, []); assert.equal(instances[0].closed, 1);
+  assert.equal(instances[1].sent.filter(message => message.kind === "command").length, 0);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(instances.length, 2);
+});
+test("foreground liveness checks share a ping and teardown releases its deadline", async () => {
+  const transport = new Transport();
+  const connection = await connectIpc({ startPort: 32145, endPort: 32145, heartbeatTimeoutMs: 30, transportFactory: () => transport });
+  connection.checkConnection(); connection.checkConnection();
+  const ping = transport.sent.filter(message => message.kind === "ping"); assert.equal(ping.length, 1);
+  transport.receive(packet("pong", "connection.pong", {}, undefined, "unrelated"));
+  connection.checkConnection(); assert.equal(transport.sent.filter(message => message.kind === "ping").length, 1);
+  transport.receive(packet("pong", "connection.pong", {}, undefined, ping[0].id));
+  connection.checkConnection(); assert.equal(transport.sent.filter(message => message.kind === "ping").length, 2);
+  connection.close(); await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(connection.state, "closed"); assert.equal(transport.closed, 1);
 });
 test("readiness follows pushed lifecycle; timeout and abort release their listeners", async () => {
   const { connection, transport, channel } = await setup({ status: "initializing" });
@@ -101,4 +155,34 @@ test("real C# gateway and browser WebSocket SDK interoperate in both directions"
   let ticket; channel.on("download.ready", payload => { ticket = payload; }); channel.send("level.download", {}); await until(() => ticket);
   const response = await fetch(ticket.url); assert.equal(await response.text(), "a level file"); assert.equal(response.headers.get("x-byte-length"), "12");
   connection.close(); child.kill("SIGTERM"); await once(child, "exit");
+});
+
+test("real gateway restarts and page reloads recover without recreating the browser tab", { skip: !process.env.ADOFAIIPC_PROTOCOL_FIXTURE || !globalThis.WebSocket }, async t => {
+  const children = []; let connection;
+  t.after(() => { connection?.close(); for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM"); });
+  const launch = async () => {
+    const child = spawn(process.env.DOTNET_EXE ?? `${process.env.HOME}/.dotnet/dotnet`, [process.env.ADOFAIIPC_PROTOCOL_FIXTURE, "--serve"], { stdio: ["ignore", "pipe", "pipe"] });
+    children.push(child); let output = ""; child.stdout.on("data", value => { output += value; });
+    await until(() => /IPC_TEST_SERVER_PORT=([0-9]+)/.test(output));
+    return { child, port: Number(output.match(/IPC_TEST_SERVER_PORT=([0-9]+)/)[1]) };
+  };
+  let server = await launch(); const port = server.port;
+  const options = { startPort: port, endPort: port, connectTimeoutMs: 1000, heartbeatIntervalMs: 50, heartbeatTimeoutMs: 200 };
+  connection = await connectIpc(options);
+  const channel = connection.namespace("test-mod"); await channel.whenReady();
+  for (let restart = 0; restart < 2; restart++) {
+    const oldId = connection.connectionId;
+    const exited = once(server.child, "exit"); server.child.kill("SIGTERM"); await exited;
+    await until(() => connection.state === "reconnecting");
+    server = await launch(); assert.equal(server.port, port);
+    connection.checkConnection(); await channel.whenReady({ timeoutMs: 3000 });
+    assert.equal(connection.state, "connected"); assert.notEqual(connection.connectionId, oldId);
+  }
+  for (let reload = 0; reload < 3; reload++) {
+    const old = connection; const oldId = old.connectionId; old.close();
+    connection = await connectIpc(options); await connection.namespace("test-mod").whenReady();
+    assert.equal(old.state, "closed"); assert.notEqual(connection.connectionId, oldId);
+  }
+  connection.checkConnection(); await new Promise(resolve => setTimeout(resolve, 250));
+  assert.equal(connection.state, "connected");
 });
