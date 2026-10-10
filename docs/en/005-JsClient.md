@@ -71,3 +71,5 @@ IpcNamespaceError(code from the mod). A readiness timeout does not stop discover
 must observe channel.onStatus and recover their read-only projections when the mod becomes ready.
 `isIpcUnavailable` matches UNAVAILABLE from sends without a connection or an explicitly closed
 connection. Mutating commands are never replayed after reconnecting.
+
+Declare the feature contract with `connection.namespace("tuf-replay", 10)` (use major 1 for TUFHelperLite and ImplResourcePack). The SDK rejects a missing or different ready feature major with `feature_protocol_mismatch` and prevents domain traffic until a compatible feature is available.

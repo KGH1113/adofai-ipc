@@ -68,3 +68,5 @@ whenReady는 polling 없이 상태 이벤트를 기다리며 기본15000ms 후 I
 재탐색을 계속하므로 앱은 channel.onStatus의 ready 전환 때 읽기 상태를 복구해야 합니다.
 연결 없이 전송하거나 명시적으로 닫힌 연결을 시작하면 IpcUnavailableError(UNAVAILABLE)이며,
 isIpcUnavailable은 UNAVAILABLE만 식별합니다. 변경 명령은 재접속해도 자동 재전송하지 않습니다.
+
+기능 메시지 계약은 `connection.namespace("tuf-replay", 10)`으로 지정합니다. TUFHelperLite와 ImplResourcePack은 major 1을 사용합니다. ready 수명 메시지의 major가 없거나 다르면 SDK가 `feature_protocol_mismatch`를 알리고 호환 기능이 준비될 때까지 도메인 메시지 송수신을 막습니다.
