@@ -36,7 +36,7 @@ connection.close();
 ```
 
 connectIpc(options)는 연결을 시작합니다. new IpcConnection(options)는 listener를 먼저 설치하기
-위해 시작을 분리합니다. 기본 host127.0.0.1, port32145..32155, 포트별 timeout1500ms입니다.
+위해 시작을 분리합니다. 기본 host127.0.0.1, port32145..32155, 포트별 timeout8000ms입니다.
 transportFactory와 onProtocolMismatch를 주입할 수 있습니다. browser는 global WebSocket을
 사용하고 native나 WebSocket 없는 Node 환경은 adapter를 주입합니다.
 
@@ -53,6 +53,9 @@ checkConnection()은 유지된 소켓의 응답을 확인하거나 대기 중인
 heartbeatIntervalMs(기본10000ms), heartbeatTimeoutMs(기본15000ms)로 ping/pong 응답을 확인해
 close 이벤트 없이 끊어진 소켓도 교체합니다. browser transport는 pagehide 때 소켓을 해제하고
 연결 후 error도 연결 종료로 처리합니다. close()는 진행 중인 탐색과 heartbeat timer를 취소합니다.
+재탐색은 마지막 성공 포트부터 시작합니다. Chromium은 같은 renderer에서 실패한 연결이 쌓이면
+WebSocket 시작을 최대5초 지연시킬 수 있어 기본8초 동안 handshake를 기다립니다. 너무 짧은
+timeout은 게임을 켠 뒤에도 지연된 시도를 계속 취소하며, 페이지 새로고침으로도 이어질 수 있습니다.
 
 channel: on, onCommand, send, emit, reply, onStatus, status, error, whenReady.
 send(name,payload,{id,signal})는 ID를 즉시 반환합니다. AbortSignal은 전송 전에만 검사합니다.

@@ -57,6 +57,30 @@ test("concurrent start calls share one discovery and close cancels an unfinished
   assert.equal(transport.closed, 1); assert.equal(transport.messages.size, 0); assert.equal(transport.closes.size, 0);
   assert.equal(connection.state, "closed");
 });
+test("default discovery tolerates Chromium's handshake penalty in a retained renderer", async t => {
+  const transport = new Transport();
+  const open = transport.connect.bind(transport);
+  transport.connect = async () => { await new Promise(resolve => setTimeout(resolve, 5100)); await open(); };
+  const connection = new IpcConnection({ startPort: 32145, endPort: 32145, transportFactory: () => transport });
+  t.after(() => connection.close());
+  await connection.start();
+  assert.equal(connection.state, "connected"); assert.equal(transport.closed, 0);
+});
+test("restarts prefer the last working port and still discover a changed port", async t => {
+  const attempts = []; let available = 32147; let current;
+  const connection = await connectIpc({ startPort: 32145, endPort: 32147, transportFactory: url => {
+    const port = Number(new URL(url).port); attempts.push(port);
+    const transport = new Transport({ fail: port !== available });
+    if (port === available) current = transport;
+    return transport;
+  } });
+  t.after(() => connection.close());
+  const channel = connection.namespace("test-mod"); await channel.whenReady();
+  current.disconnect(); await until(() => connection.state === "connected"); await channel.whenReady();
+  assert.deepEqual(attempts, [32145, 32146, 32147, 32147]);
+  available = 32146; current.disconnect(); await until(() => connection.state === "connected"); await channel.whenReady();
+  assert.deepEqual(attempts.slice(4), [32147, 32145, 32146]);
+});
 test("a silently dead socket is replaced and old responses cannot hydrate the new session", async t => {
   const instances = [];
   const connection = await connectIpc({ startPort: 32145, endPort: 32145, heartbeatIntervalMs: 10, heartbeatTimeoutMs: 20,

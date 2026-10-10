@@ -31,6 +31,7 @@ export class IpcConnection {
   private readonly startPort: number;
   private readonly endPort: number;
   private readonly host: string;
+  private preferredPort: number | undefined;
   private starting: Promise<void> | undefined;
   private cancelProbe: (() => void) | undefined;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -45,7 +46,9 @@ export class IpcConnection {
 
   constructor(private readonly options: ConnectIpcOptions = {}) {
     this.factory = options.transportFactory ?? browserTransportFactory;
-    this.timeoutMs = options.connectTimeoutMs ?? 1500;
+    // Chromium can delay WebSocket opening by up to five seconds after failed
+    // handshakes in the same renderer process. Aborting sooner perpetuates that penalty.
+    this.timeoutMs = options.connectTimeoutMs ?? 8000;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 10000;
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 15000;
     this.startPort = options.startPort ?? 32145; this.endPort = options.endPort ?? 32155;
@@ -115,7 +118,12 @@ export class IpcConnection {
     catch (error) { this.lost(transport); throw error; }
   }
   private async discover(): Promise<{ transport: IpcTransport; welcome: IpcMessage }> {
-    for (let port = this.startPort; port <= this.endPort; port++) {
+    const ports = Array.from({ length: this.endPort - this.startPort + 1 }, (_, index) => this.startPort + index);
+    if (this.preferredPort !== undefined) {
+      ports.splice(ports.indexOf(this.preferredPort), 1);
+      ports.unshift(this.preferredPort);
+    }
+    for (const port of ports) {
       if (this.stopped) throw new IpcUnavailableError();
       const transport = this.factory(`ws://${this.host}:${port}/ipc/ws`, IPC_SUBPROTOCOL);
       let resolveWelcome!: (message: IpcMessage) => void; let rejectWelcome!: (reason: unknown) => void;
@@ -139,6 +147,7 @@ export class IpcConnection {
         if (data?.server !== "AdofaiIpc") throw new IpcUnavailableError();
         if (data.protocolVersion !== PROTOCOL_VERSION) throw new IpcProtocolMismatchError(data.protocolVersion ?? null, data.serverVersion ?? null);
         if (this.stopped) throw new IpcUnavailableError();
+        this.preferredPort = port;
         return { transport, welcome: verified };
       } catch (error) {
         dispose();

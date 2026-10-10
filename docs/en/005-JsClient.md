@@ -37,7 +37,7 @@ connection.close();
 ```
 
 `connectIpc(options)` creates and starts a connection. `new IpcConnection(options)` lets you create
-channels and install listeners first. Defaults: host127.0.0.1, ports32145..32155, timeout1500ms per
+channels and install listeners first. Defaults: host127.0.0.1, ports32145..32155, timeout8000ms per
 probe. Options include transportFactory and onProtocolMismatch. A browser uses global WebSocket;
 Node without global WebSocket and native applications inject an IpcTransport factory.
 
@@ -54,6 +54,9 @@ checkConnection() probes a retained socket or wakes a pending retry. Correlated 
 replace silently dead sockets (heartbeatIntervalMs defaults to 10000, heartbeatTimeoutMs to 15000).
 The browser transport releases its socket on pagehide and treats an error after open as a lost
 connection even if no close event arrives. close() cancels active discovery and heartbeat timers.
+Discovery retries the last successful port first. Its default eight-second handshake allowance
+covers Chromium's per-renderer WebSocket delay of up to five seconds after failures; a short
+timeout can abort every delayed attempt even after the game starts and across page reloads.
 
 Channel: on(name,callback), onCommand(name,callback), send(name,payload,{id,signal}), emit(name,
 payload), reply(correlationId,name,payload), onStatus(callback), status, error, whenReady({timeoutMs,
