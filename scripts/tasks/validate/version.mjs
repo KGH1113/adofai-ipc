@@ -11,7 +11,8 @@ assert.equal(manifest.SchemaVersion, 1);
 assert.equal(manifest.ContractMajor, 1);
 assert.equal(manifest.ContractAssemblyVersion, "1.0.0.0");
 assert.equal(manifest.WireMajor, 3);
-assert.equal(JSON.parse(read("packages/client/package.json")).version, version);
+for (const file of ["packages/client/package.json", "packages/adofai-ipc/package.json", "packages/typespec/package.json"])
+  assert.equal(JSON.parse(read(file)).version, version, file);
 assert.equal(read("Directory.Build.props").match(/<ProductVersion>(.*?)<\/ProductVersion>/)[1], version);
 assert.equal(read("AdofaiIpc/IpcProtocol.cs").match(/ProductVersion = "(.*?)"/)[1], version);
 assert.equal(read("packages/client/src/version.ts").match(/CLIENT_VERSION = "(.*?)"/)[1], version);

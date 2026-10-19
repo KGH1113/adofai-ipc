@@ -108,7 +108,7 @@ export class IpcConnection {
     if (!/^[a-z0-9.-]+$/.test(name)) throw new TypeError("Invalid IPC message name.");
     const id = options.id ?? messageId();
     if (!id || id.length > 128) throw new TypeError("Invalid IPC message id.");
-    this.write({ kind, namespace, name, id, correlationId, payload: payload ?? {} }); return id;
+    this.write({ kind, namespace, name, id, correlationId, payload: payload === undefined ? {} : payload }); return id;
   }
   private subscribe(namespace: string): void { this.write({ kind: "subscribe", namespace, name: "namespace.subscribe", id: messageId(), payload: {} }); }
   private write(message: IpcMessage): void {
@@ -246,6 +246,13 @@ export class IpcChannel {
   }
   /** Internal transport adapter dispatch. */
   receive(message: IpcMessage): void {
+    if (message.name === "command.rejected") {
+      const error = message.payload as IpcErrorInfo | undefined;
+      if (error?.code === "origin_not_allowed") {
+        this._status = "error"; this._error = error;
+        for (const listener of [...this.statuses]) { try { listener(this.status, this.error); } catch { } }
+      }
+    }
     if (message.kind === "namespace") {
       let payload = message.payload as { status: IpcNamespaceStatus; error?: IpcErrorInfo; featureProtocolMajor?: number };
       if (payload?.status === "ready" && this.protocolMajor !== undefined && payload.featureProtocolMajor !== this.protocolMajor) {

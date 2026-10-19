@@ -1,0 +1,19 @@
+{
+  "name": "@adofai-ipc/typespec",
+  "version": "2.0.0",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/index.js",
+  "tspMain": "./lib/main.tsp",
+  "exports": { ".": { "typespec": "./lib/main.tsp", "default": "./src/index.js" } },
+  "bin": { "adofai-ipc": "./bin/adofai-ipc.mjs" },
+  "files": ["src", "lib", "bin"],
+  "scripts": {
+    "build": "node --check src/index.js && node --check src/generate.js",
+    "check": "node --check src/index.js && node --check src/generate.js && node --check bin/adofai-ipc.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": { "@typespec/compiler": "1.17.0", "typescript": "^5.9.3" },
+  "devDependencies": { "adofai-ipc": "workspace:^" },
+  "engines": { "node": ">=22" }
+}

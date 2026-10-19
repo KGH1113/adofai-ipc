@@ -1,6 +1,8 @@
+import { CLIENT_VERSION } from "./version";
+
 export class IpcConnectionError extends Error {
   readonly code: string = "UNAVAILABLE";
-  constructor(message = "ADOFAI-IPC is unavailable. Start the game with ADOFAI-IPC v1.0.0 enabled.") {
+  constructor(message = `ADOFAI-IPC is unavailable. Start the game with ADOFAI-IPC v${CLIENT_VERSION} enabled.`) {
     super(message); this.name = "IpcConnectionError";
   }
 }
@@ -13,7 +15,7 @@ export class IpcTimeoutError extends IpcConnectionError {
 }
 export class IpcProtocolMismatchError extends Error {
   readonly code = "INCOMPATIBLE";
-  readonly clientVersion = "1.0.0";
+  readonly clientVersion = CLIENT_VERSION;
   constructor(readonly protocolVersion: number | null, readonly serverVersion: string | null) {
     super("The game and application use different ADOFAI-IPC protocols. Update them and restart the game.");
     this.name = "IpcProtocolMismatchError";

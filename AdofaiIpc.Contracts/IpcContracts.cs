@@ -53,6 +53,7 @@ public sealed class FeatureDescription
   public string Version { get; }
   public string DisplayName { get; }
   public int ProtocolMajor { get; }
+  public bool ExactOrigins { get; set; }
   public string[] AllowedOrigins => _origins == null ? null : (string[])_origins.Clone();
   private readonly string[] _origins;
 
@@ -123,6 +124,13 @@ public interface IClientConnection
   string Origin { get; }
   void Send(string name, string json, string correlationId = null);
   string SendCommand(string name, string json);
+}
+
+/// <summary>Optional runtime extension for a captured connection's live transport lifetime.</summary>
+public interface IClientConnectionState
+{
+  bool IsConnected { get; }
+  CancellationToken CancellationToken { get; }
 }
 
 public sealed class PeerEvent

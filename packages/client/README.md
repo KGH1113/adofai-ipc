@@ -1,75 +1,48 @@
-# TypeScript SDK
+# ADOFAI-IPC JavaScript/TypeScript SDK
 
-[English](../../docs/en/005-JsClient.md) | [한국어](../../docs/kor/005-JsClient.md)
+The SDK connects external applications to ADOFAI mods on the same computer.
+It handles local server discovery, WebSocket subscriptions, readiness and reconnection.
+Mods and applications exchange named commands, results and state updates.
 
-The v2 SDK is not published to npm during this preparation. Generate a reproducible snapshot:
+- [English client guide](../../docs/en/005-JsClient.md)
+- [한국어 클라이언트 가이드](../../docs/kor/005-JsClient.md)
+- [Migrating from v0 to v2](../../docs/en/008-Migration.md)
+
+## Include the SDK in an application
+
+The current v2 development workflow uses a source snapshot rather than an npm release.
+Run from the ADOFAI-IPC repository root:
 
 ```bash
-./scripts/run.sh client-sync /path/to/consumer/vendor/adofai-ipc
+./scripts/run.sh client-sync /path/to/your-app/src/vendor/adofai-ipc
 ```
 
-Commit the generated src, LICENSE, README.md and source.json in the consumer. The manifest records
-the upstream commit, dirty-source marker, SDK/wire version and SHA-256 per source file. Regenerate
-after changing upstream. Avoid absolute file dependencies and manual copies of the transport.
-Point Vite/TypeScript aliases at the raw source if keeping an existing import alias; remove the
-registry dependency and update lockfiles. Raw source requires no tsup-only version definition.
+Commit the generated `src/`, `LICENSE`, `README.md` and `source.json` in the application.
+The manifest records the upstream commit, dirty-source marker, SDK/wire versions and SHA-256 per source file.
+Update by changing upstream and regenerating the snapshot.
 
-```ts
-import { IpcConnection } from "./vendor/adofai-ipc/src";
+Import from `./vendor/adofai-ipc/src` in an application file such as `src/ipc-demo.ts`.
+The source needs no tsup-specific version substitution. Compile it with the application.
+If preserving an existing import alias, update both TypeScript and bundler aliases.
+Remove the old registry dependency and update the lockfile when migrating.
 
-// Register listeners before connecting so the initial snapshot cannot be lost.
-const connection = new IpcConnection();
-const channel = connection.namespace("example-mod");
-channel.on<{ revision: number }>("library.snapshot", snapshot => projectLibrary(snapshot));
-channel.on<{ revision: number }>("library.changed", change => projectLibrary(change));
-channel.on("level.opened", (payload, message) => applyOpenedLevel(payload, message.correlationId));
-channel.on("command.rejected", (error, message) => showFailure(error, message.correlationId));
-await connection.start();
-await channel.whenReady({ timeoutMs: 15_000 });
-const commandId = channel.send("level.open", { levelId: "abc" });
+## First connection
 
-channel.onCommand("render.frame", (frame, message) => {
-    // Perform the domain operation; report its actual completion.
-    channel.reply(message.id, "render.frame.ready", { path: "/tmp/frame.png" });
-});
-// On application shutdown:
-connection.close();
+The [client guide](../../docs/en/005-JsClient.md#2-connecting-and-sending-a-command) contains a complete counter example
+paired with the [C# mod example](../../docs/en/002-ModApi.md#2-registering-a-feature).
+
+Create an `IpcConnection`, obtain `namespace("example-mod", 1)`, and install listeners before calling `start()`.
+Wait for the channel's `whenReady()` before sending commands.
+The second namespace argument must match the mod's feature message major.
+
+`send()` returns a command ID. Receive named result events with `on()` and match their `correlationId`.
+Reconnection restores subscriptions without replaying commands. Use fresh snapshots to recover state.
+Call `close()` when the connection is no longer needed.
+
+## Develop the SDK
+
+```bash
+./scripts/run.sh client
 ```
 
-`connectIpc(options)` creates and starts a connection. `new IpcConnection(options)` lets you create
-channels and install listeners first. Defaults: host127.0.0.1, ports32145..32155, timeout8000ms per
-probe. Options include transportFactory and onProtocolMismatch. A browser uses global WebSocket;
-Node without global WebSocket and native applications inject an IpcTransport factory.
-
-The transport port exposes connect, send, close, onMessage and onClose. send/close may be async.
-Its onMessage callback supplies UTF-8 JSON strings. It must support the supplied WebSocket
-subprotocol and dispose probe connections/listeners on failure.
-
-Connection: namespace(name), onState(listener), state, peerId, connectionId, close(). States:
-disconnected, connected, reconnecting, closed, incompatible. Reconnect uses bounded jittered
-backoff and resubscribes without replay. onState immediately reports the current state.
-Initial server absence also enters reconnecting: start() completes after the first discovery
-round, while channel.whenReady() waits for the actual mod. Concurrent start calls share discovery.
-checkConnection() probes a retained socket or wakes a pending retry. Correlated ping/pong checks
-replace silently dead sockets (heartbeatIntervalMs defaults to 10000, heartbeatTimeoutMs to 15000).
-The browser transport releases its socket on pagehide and treats an error after open as a lost
-connection even if no close event arrives. close() cancels active discovery and heartbeat timers.
-Discovery retries the last successful port first. Its default eight-second handshake allowance
-covers Chromium's per-renderer WebSocket delay of up to five seconds after failures; a short
-timeout can abort every delayed attempt even after the game starts and across page reloads.
-
-Channel: on(name,callback), onCommand(name,callback), send(name,payload,{id,signal}), emit(name,
-payload), reply(correlationId,name,payload), onStatus(callback), status, error, whenReady({timeoutMs,
-signal}). send returns an ID immediately, not a Promise of a generic result. An AbortSignal only
-guards a send before transmission; cancel an already running operation with a domain command.
-Unsubscribe functions release handlers. The application owns correlation, domain timeouts,
-disconnection rejection, retry policy and state projection.
-
-Wire mismatch throws IpcProtocolMismatchError(codeINCOMPATIBLE) and stops probing/retrying.
-whenReady is event driven; default timeout15000ms, IpcTimeoutError(codeTIMEOUT), or
-IpcNamespaceError(code from the mod). A readiness timeout does not stop discovery: applications
-must observe channel.onStatus and recover their read-only projections when the mod becomes ready.
-`isIpcUnavailable` matches UNAVAILABLE from sends without a connection or an explicitly closed
-connection. Mutating commands are never replayed after reconnecting.
-
-Pass a feature message major when subscribing: `connection.namespace("tuf-replay", 10)`. A missing or different `featureProtocolMajor` in a ready lifecycle message produces `feature_protocol_mismatch`, blocks outgoing commands/events and discards incompatible domain messages. Reconnection can recover after a matching feature becomes ready. Subscriptions without the second argument retain their existing wire behavior.
+This builds, type-checks and tests the SDK without publishing it.

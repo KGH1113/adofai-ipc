@@ -10,6 +10,7 @@ dist/
 
 # Library
 node_modules/
+.pnpm-store/
 
 # Local Environment
 .env

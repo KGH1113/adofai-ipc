@@ -104,7 +104,7 @@ public sealed class IpcServer
     protected override void OnMessage(MessageEventArgs e)
     {
       if (!e.IsText || e.RawData.Length > IpcProtocol.MaxMessageBytes) { CloseAsync(1009, "Control message exceeds the limit."); return; }
-      try { _registry.Receive(this, JsonConvert.DeserializeObject<IpcPeerMessage>(e.Data, new JsonSerializerSettings { MaxDepth = 32, TypeNameHandling = TypeNameHandling.None })); }
+      try { _registry.Receive(this, JsonConvert.DeserializeObject<IpcPeerMessage>(e.Data, new JsonSerializerSettings { MaxDepth = 32, TypeNameHandling = TypeNameHandling.None, DateParseHandling = DateParseHandling.None })); }
       catch { CloseAsync(1007, "Invalid IPC message."); }
     }
     protected override void OnClose(CloseEventArgs e) { _lifetime.Cancel(); if (Info != null) _registry.Detach(this); while (_outgoing.TryDequeue(out _)) { } }

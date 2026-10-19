@@ -45,7 +45,7 @@ internal sealed class RoutedRuntime : IIpcRuntime
       if (_features.ContainsKey(description.Name)) throw new InvalidOperationException("IPC feature is already registered: " + description.Name);
       var handle = _registry.RegisterNamespace(description.Name, new IpcNamespaceInfo {
         DisplayName = description.DisplayName, Version = description.Version,
-        ProtocolMajor = description.ProtocolMajor, AllowedOrigins = description.AllowedOrigins });
+        ProtocolMajor = description.ProtocolMajor, AllowedOrigins = description.AllowedOrigins, ExactOrigins = description.ExactOrigins });
       registration = new FeatureRegistration(this, handle, _dispatch);
       _features.Add(description.Name, registration);
     }
@@ -158,6 +158,10 @@ internal sealed class FeatureRegistration : IFeatureRegistration
   { Check(); Handle.SendToPeer(peerId, name, RoutedRuntime.Parse(json), correlationId); }
   public string SendCommandToPeer(string peerId, string name, string json)
   { Check(); return Handle.SendCommandToPeer(peerId, name, RoutedRuntime.Parse(json)); }
+  internal string SendToConnection(string peerId, string connectionId, string kind, string name, string json, string correlationId = null)
+  { Check(); return Handle.SendToConnection(peerId, connectionId, kind, name, RoutedRuntime.Parse(json), correlationId); }
+  internal bool IsConnectionActive(string peerId, string connectionId) => Volatile.Read(ref _disposed) == 0 && Handle.IsConnectionActive(peerId, connectionId);
+  internal CancellationToken ConnectionLifetime(string peerId, string connectionId) => Handle.ConnectionLifetime(peerId, connectionId);
   public void Dispose()
   {
     if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -167,16 +171,18 @@ internal sealed class FeatureRegistration : IFeatureRegistration
   }
 }
 
-internal sealed class ClientConnection : IClientConnection
+internal sealed class ClientConnection : IClientConnection, IClientConnectionState
 {
   private readonly FeatureRegistration _registration;
-  private readonly IpcPeerInfo _info;
-  internal ClientConnection(FeatureRegistration registration, IpcPeerInfo info) { _registration = registration; _info = info; }
-  public string PeerId => _info.PeerId;
-  public string ConnectionId => _info.ConnectionId;
-  public string Origin => _info.Origin;
-  public void Send(string name, string json, string correlationId = null) => _registration.SendToPeer(PeerId, name, json, correlationId);
-  public string SendCommand(string name, string json) => _registration.SendCommandToPeer(PeerId, name, json);
+  internal ClientConnection(FeatureRegistration registration, IpcPeerInfo info)
+  { _registration = registration; PeerId = info.PeerId; ConnectionId = info.ConnectionId; Origin = info.Origin; CancellationToken = registration.ConnectionLifetime(PeerId, ConnectionId); }
+  public string PeerId { get; }
+  public string ConnectionId { get; }
+  public string Origin { get; }
+  public bool IsConnected => _registration.IsConnectionActive(PeerId, ConnectionId);
+  public CancellationToken CancellationToken { get; }
+  public void Send(string name, string json, string correlationId = null) => _registration.SendToConnection(PeerId, ConnectionId, "event", name, json, correlationId);
+  public string SendCommand(string name, string json) => _registration.SendToConnection(PeerId, ConnectionId, "command", name, json);
 }
 
 internal sealed class IncomingMessage : IIncomingMessage

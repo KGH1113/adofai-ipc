@@ -1,0 +1,20 @@
+{
+  "name": "adofai-ipc",
+  "version": "2.0.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "check": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": { "@adofai-ipc/client": "workspace:^" },
+  "devDependencies": { "tsup": "^8.3.5", "typescript": "^5.9.3" },
+  "engines": { "node": ">=18" }
+}

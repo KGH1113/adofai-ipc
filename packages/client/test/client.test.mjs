@@ -133,6 +133,14 @@ test("commands return IDs and named results and rejections retain correlation", 
   assert.equal(rejection.payload.code, "bad_level"); assert.equal(rejection.message.correlationId, id);
   off(); transport.receive(packet("event", "level.opened", {})); assert.equal(outcomes.length, 1); connection.close();
 });
+test("an origin denial fails readiness immediately", async () => {
+  const { connection, transport, channel } = await setup({ status: "initializing" });
+  const waiting = assert.rejects(channel.whenReady(), error => error.code === "origin_not_allowed");
+  transport.receive(packet("rejected", "command.rejected", { code: "origin_not_allowed", message: "This origin is not allowed." }));
+  await waiting;
+  await assert.rejects(channel.whenReady(), error => error.code === "origin_not_allowed");
+  connection.close();
+});
 test("server commands are answered by correlated peer events and callbacks are isolated", async () => {
   const { connection, transport, channel } = await setup(); await channel.whenReady(); let updates = 0;
   channel.on("progress.changed", () => { throw new Error("consumer bug"); }); channel.on("progress.changed", () => updates++);
@@ -141,6 +149,14 @@ test("server commands are answered by correlated peer events and callbacks are i
   const command = packet("command", "render.frame"); transport.receive(command);
   const reply = transport.sent.at(-1); assert.equal(reply.kind, "event"); assert.equal(reply.correlationId, command.id); assert.equal(reply.name, "render.frame.ready");
   transport.receive(packet("ping", "connection.ping", {}, undefined)); assert.equal(transport.sent.at(-1).kind, "pong"); connection.close();
+});
+test("explicit null survives peer events while omitted payloads retain the legacy empty object", async () => {
+  const { connection, transport, channel } = await setup(); await channel.whenReady();
+  channel.reply("void-call", "rpc.result", null);
+  assert.equal(transport.sent.at(-1).payload, null);
+  channel.emit("legacy.empty");
+  assert.deepEqual(transport.sent.at(-1).payload, {});
+  connection.close();
 });
 test("reconnect invalidates state and resubscribes without replaying commands", async () => {
   const instances = [];

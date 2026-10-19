@@ -1,0 +1,107 @@
+---
+title: 4. 저장 기능 추가
+description: 조회 전용 프로젝트의 계약·모드·앱에 저장 기능을 추가합니다.
+---
+
+이번 단계에서는 **입력란을 활성화하고 저장 버튼을 추가**합니다. 계약을 먼저 변경한 뒤 모드 handler와 앱 호출을 연결합니다.
+
+## 계약에 저장 메서드 추가
+
+기존 `getSettings()` 아래에 operation을 추가하고 양쪽 코드를 다시 생성합니다.
+
+```diff title="packages/contracts/main.tsp"
+   op getSettings(): Settings;
++  op updateSettings(settings: Settings): Settings;
+ }
+```
+
+입력과 결과가 모두 `Settings`입니다. 생성 후 C#에는 `SettingsExampleMethods.UpdateSettings`, 앱 채널에는 `updateSettings()`가 추가됩니다.
+
+## 모드에 저장 handler 추가
+
+활성화 콜백의 `mod.MarkReady()` 바로 앞에 handler를 삽입합니다. 기존 `gate`와 `current`를 함께 사용합니다.
+
+```diff title="모드 활성화 콜백"
++mod.Handle(SettingsExampleMethods.UpdateSettings, (request, context) =>
++{
++    lock (gate)
++    {
++        context.CancellationToken.ThrowIfCancellationRequested();
++        current = new Settings
++        {
++            Label = request.Settings.Label,
++            Enabled = request.Settings.Enabled
++        };
++        return Task.FromResult(current);
++    }
++});
++
+ mod.MarkReady();
+ stopIpc = mod.Dispose;
+```
+
+저장할 때는 기존 객체의 필드를 바꾸지 않고 새 객체로 교체합니다. 조회·저장이 같은 잠금을 사용하므로 `current`에 대한 동시 접근을 보호합니다. 반환하는 값은 저장 후 설정입니다.
+
+## 화면에 저장 버튼 추가
+
+체크박스 다음에 버튼을 추가합니다. `fieldset`의 `disabled`는 유지하고, 조회에 성공했을 때 코드로 해제합니다.
+
+```diff title="apps/web/index.html"
+         <label><input id="enabled" type="checkbox" /> 활성화</label>
++        <button type="submit">저장</button>
+       </fieldset>
+```
+
+`main.ts`에 form과 fieldset 참조를 추가합니다.
+
+```diff title="apps/web/src/main.ts"
+ import { SettingsExampleContract, type Settings } from "@example/ipc";
+ 
++const form = document.querySelector<HTMLFormElement>("#settings")!;
++const fields = form.querySelector<HTMLFieldSetElement>("fieldset")!;
+ const label = document.querySelector<HTMLInputElement>("#label")!;
+```
+
+`loadSettings()`에서는 조회 성공 후 입력을 활성화합니다.
+
+```diff title="apps/web/src/main.ts — loadSettings() 내부"
+     show(settings);
++    fields.disabled = false;
+     status.textContent = "조회 완료";
+```
+
+## 저장 요청 연결
+
+`main.ts`의 마지막 `void loadSettings();` 앞에 아래 코드를 추가합니다.
+
+```ts title="apps/web/src/main.ts에 추가"
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  fields.disabled = true;
+  try {
+    const settings = await channel.updateSettings({
+      settings: { label: label.value, enabled: enabled.checked },
+    });
+    if (disposed) return;
+    show(settings);
+    status.textContent = "저장됨";
+  } catch (error) {
+    if (!disposed) status.textContent = `저장 실패: ${String(error)}`;
+  } finally {
+    if (!disposed) fields.disabled = false;
+  }
+});
+```
+
+operation의 인자 이름이 `settings`이므로 `{ settings: ... }`로 전달합니다. 저장 중에는 입력과 버튼을 잠그고, 성공하면 모드가 반환한 값을 화면에 반영합니다. 오류가 나면 메시지를 표시하고 다시 입력할 수 있게 합니다.
+
+## 최종 확인
+
+수정한 모드를 빌드·설치하고 다시 활성화한 뒤 웹 페이지를 새로고침합니다.
+
+1. 초기값이 조회되면 입력란과 저장 버튼이 활성화됩니다.
+2. 문구와 체크 상태를 바꾸고 저장하면 `저장됨`이 표시됩니다.
+3. 브라우저만 새로고침하면 저장한 값이 다시 조회됩니다.
+4. 모드를 비활성화했다가 활성화하면 `Example`과 활성화 상태로 돌아갑니다.
+
+이제 조회와 저장이 연결됐습니다. 파일 저장과 다른 탭으로의 실시간 알림은 이 예제에서 추가하지 않습니다.

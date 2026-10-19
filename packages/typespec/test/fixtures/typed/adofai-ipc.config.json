@@ -1,0 +1,5 @@
+{
+  "contract": "main.tsp",
+  "typescript": { "output": "generated", "packageName": "@test/typed-ipc", "workspace": true },
+  "csharp": { "output": "generated-csharp", "namespace": "TypedTest.Generated" }
+}

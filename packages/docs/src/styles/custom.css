@@ -1,0 +1,41 @@
+:root {
+  --sl-color-accent-low: #133c37;
+  --sl-color-accent: #59b9a5;
+  --sl-color-accent-high: #bdeadd;
+  --sl-color-white: #f2f7f5;
+  --sl-color-gray-1: #dce5e1;
+  --sl-color-gray-2: #b5c4bd;
+  --sl-color-gray-3: #82968c;
+  --sl-color-gray-4: #4b6056;
+  --sl-color-gray-5: #2c3d34;
+  --sl-color-gray-6: #1a2721;
+  --sl-color-black: #111c17;
+  --sl-font: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --sl-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --sl-content-width: 49rem;
+  --sl-text-h1: 2rem;
+  --sl-line-height: 1.8;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e7f4ed;
+  --sl-color-accent: #187b61;
+  --sl-color-accent-high: #14583f;
+  --sl-color-white: #17271e;
+  --sl-color-gray-1: #293d31;
+  --sl-color-gray-2: #415849;
+  --sl-color-gray-3: #647a6b;
+  --sl-color-gray-4: #96a99b;
+  --sl-color-gray-5: #d1ddd4;
+  --sl-color-gray-6: #eef3ee;
+  --sl-color-gray-7: #f6f8f4;
+  --sl-color-black: #fcfdfb;
+}
+
+body { letter-spacing: -0.015em; }
+h1, h2, h3 { letter-spacing: -0.025em; word-break: keep-all; }
+.sl-markdown-content p, .sl-markdown-content li { word-break: keep-all; overflow-wrap: anywhere; }
+.sl-markdown-content code { letter-spacing: 0; }
+.sl-markdown-content td code { white-space: nowrap; }
+.sl-markdown-content a { text-underline-offset: 0.22em; }
+.site-title { font-weight: 700; letter-spacing: -0.025em; }

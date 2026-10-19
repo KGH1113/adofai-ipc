@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../AdofaiIpc.Contracts/AdofaiIpc.Contracts.csproj" />
+    <ProjectReference Include="../AdofaiIpc.Loader/AdofaiIpc.Loader.csproj" />
+    <Compile Include="../packages/typespec/test/fixtures/typed/generated-csharp/*.g.cs" />
     <Compile Include="../AdofaiIpc/Runtime/RoutedRuntime.cs" />
     <Reference Include="Newtonsoft.Json"><HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath></Reference>
     <Compile Include="../AdofaiIpc/IpcMessageTooLargeException.cs;../AdofaiIpc/IpcCommand.cs;../AdofaiIpc/IpcProtocol.cs;../AdofaiIpc/IpcPeerMessage.cs;../AdofaiIpc/AdofaiIpcNamespace.cs;../AdofaiIpc/IpcNamespaceInfo.cs;../AdofaiIpc/IpcNamespaceStatus.cs;../AdofaiIpc/IpcLocalPeer.cs;../AdofaiIpc/IpcDownloadSource.cs;../AdofaiIpc/IpcDownloadResponse.cs;../AdofaiIpc/IpcDownloadError.cs" />

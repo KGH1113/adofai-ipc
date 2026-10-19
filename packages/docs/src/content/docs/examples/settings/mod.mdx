@@ -1,0 +1,64 @@
+---
+title: 2. 모드 등록
+description: 모드에 초기 설정과 조회 handler를 추가합니다.
+---
+
+이번 단계에서는 **모드가 초기 설정을 보관하고 `getSettings()`에 응답**하도록 만듭니다. 웹 화면은 아직 연결하지 않습니다.
+
+## 등록 수명 준비
+
+모드를 비활성화할 때 등록도 해제해야 합니다. 모드 클래스에 정리 함수를 보관할 필드를 추가합니다. `System`과 `System.Threading.Tasks` namespace를 사용합니다.
+
+```csharp title="모드 클래스의 필드"
+private Action stopIpc = () => { };
+```
+
+## 활성화 시 등록
+
+활성화 콜백에 아래 코드를 추가합니다. 이 콜백의 `ipc`는 SDK 객체입니다. `current`가 이 활성화 기간 동안 보관할 설정입니다.
+
+```csharp title="모드 활성화 콜백에 추가"
+var gate = new object();
+var current = new Settings { Label = "Example", Enabled = true };
+
+var mod = ipc.RegisterMod(
+    SettingsExampleContract.Instance,
+    displayName: "Settings Example",
+    allowedOrigins: new[] { "http://localhost:5173" });
+
+mod.Handle(SettingsExampleMethods.GetSettings, (request, context) =>
+{
+    lock (gate)
+    {
+        return Task.FromResult(current);
+    }
+});
+
+mod.MarkReady();
+stopIpc = mod.Dispose;
+```
+
+`GetSettings`에는 입력이 없으므로 `request`에서 읽을 필드가 없습니다. handler가 반환하는 `Task<Settings>`가 앱의 조회 결과가 됩니다.
+
+`gate`는 이후 추가할 저장 handler와 함께 사용할 잠금입니다. 읽기와 쓰기가 같은 설정을 다루므로 두 작업에 같은 잠금을 사용합니다.
+
+`MarkReady()`는 handler 설치 후에 호출합니다. `allowedOrigins`는 앞 단계에서 실행한 웹 앱 주소입니다. `localhost` 대신 `127.0.0.1`로 접속하면 다른 Origin으로 취급합니다.
+
+## 비활성화 시 해제
+
+비활성화 콜백에 정리 함수를 연결합니다.
+
+```csharp title="모드 비활성화 콜백에 추가"
+stopIpc();
+stopIpc = () => { };
+```
+
+다음 활성화에서는 새 등록과 초기 설정을 만듭니다. 모드가 활성화될 때 콜백을 중복 실행하지 않도록 연결하세요.
+
+## 확인
+
+모드를 빌드·설치하고 활성화합니다. 이 시점에는 모드 등록과 초기화가 끝나지만 웹 화면의 `모드 연결 전`은 그대로입니다. 아직 앱 코드를 연결하지 않았기 때문입니다.
+
+다음 단계에서 조회 결과가 `label: "Example"`, `enabled: true`인지 확인합니다.
+
+[다음: 브라우저에서 모드의 설정을 조회합니다 →](/examples/settings/read/)

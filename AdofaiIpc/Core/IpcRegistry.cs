@@ -90,7 +90,7 @@ public sealed class IpcRegistry
     AdofaiIpcNamespace[] handles; Peer peer;
     lock (_sync)
     {
-      if (!_peers.TryGetValue(transport.Info.PeerId, out peer)) return;
+      if (!_peers.TryGetValue(transport.Info.PeerId, out peer) || !ReferenceEquals(peer.Transport, transport)) return;
       _peers.Remove(transport.Info.PeerId);
       handles = peer.Subscriptions.Where(name => _namespaces.ContainsKey(name)).Select(name => _namespaces[name].Handle).ToArray();
     }
@@ -102,7 +102,7 @@ public sealed class IpcRegistry
   {
     if (message == null) { transport.Close(); return; }
     Peer peer;
-    lock (_sync) { if (!_peers.TryGetValue(transport.Info.PeerId, out peer)) return; peer.LastSeen = DateTime.UtcNow; }
+    lock (_sync) { if (!_peers.TryGetValue(transport.Info.PeerId, out peer) || !ReferenceEquals(peer.Transport, transport)) return; peer.LastSeen = DateTime.UtcNow; }
     if (message.Kind == "pong") return;
     if (message.Kind == "ping") { transport.Send(IpcPeerMessage.Create("pong", null, "connection.pong", null, message.Id)); return; }
     if (message.Kind == "hello")
@@ -209,13 +209,26 @@ public sealed class IpcRegistry
     foreach (Peer peer in peers) if (IsOriginAllowed(handle.Info, peer.Transport.Info.Origin)) peer.Transport.Send(message);
   }
 
-  internal string SendToPeer(AdofaiIpcNamespace handle, string peerId, string kind, string name, object payload, string correlationId)
+  internal bool IsConnectionActive(AdofaiIpcNamespace handle, string peerId, string connectionId)
+  {
+    lock (_sync) return _namespaces.TryGetValue(handle.Name, out var entry) && ReferenceEquals(entry.Handle, handle) &&
+      _peers.TryGetValue(peerId, out var peer) && peer.Transport.Info.ConnectionId == connectionId && peer.Subscriptions.Contains(handle.Name);
+  }
+
+  internal CancellationToken ConnectionLifetime(string peerId, string connectionId)
+  {
+    lock (_sync) return _peers.TryGetValue(peerId, out var peer) && peer.Transport.Info.ConnectionId == connectionId
+      ? peer.Lifetime.Token : new CancellationToken(true);
+  }
+
+  internal string SendToPeer(AdofaiIpcNamespace handle, string peerId, string kind, string name, object payload, string correlationId, string expectedConnectionId = null)
   {
     Peer peer;
     lock (_sync)
     {
       RequireCurrent(handle);
-      if (!_peers.TryGetValue(peerId, out peer) || !peer.Subscriptions.Contains(handle.Name))
+      if (!_peers.TryGetValue(peerId, out peer) || !peer.Subscriptions.Contains(handle.Name) ||
+        (expectedConnectionId != null && peer.Transport.Info.ConnectionId != expectedConnectionId))
       {
         // Deferred hydration can outlive a normal disconnect or unsubscribe.
         if (kind == "event") return null;
@@ -293,7 +306,8 @@ public sealed class IpcRegistry
     {
       if (string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase)) return true;
       if (Uri.TryCreate(allowed, UriKind.Absolute, out Uri a) && Uri.TryCreate(origin, UriKind.Absolute, out Uri o)
-        && a.IsDefaultPort && a.Scheme == o.Scheme && a.Host == o.Host) return true;
+        && a.Scheme == o.Scheme && a.Host.Equals(o.Host, StringComparison.OrdinalIgnoreCase)
+        && (info.ExactOrigins ? a.Port == o.Port : a.IsDefaultPort)) return true;
     }
     return false;
   }

@@ -1,0 +1,6 @@
+{
+  "generator": "@adofai-ipc/typespec",
+  "files": [
+    "TypedTest.g.cs"
+  ]
+}

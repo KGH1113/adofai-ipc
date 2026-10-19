@@ -15,11 +15,17 @@ internal static partial class Program
   static void Check(bool condition, string detail) { if (!condition) throw new Exception(detail); }
   static async Task Main(string[] args)
   {
+    if (args.Contains("--serve-typed") || args.Contains("--settings-example"))
+    {
+      await ServeTypedExample(args.Contains("--serve-typed"));
+      return;
+    }
     if (!args.Contains("--serve"))
     {
       TestDiscardedDispatcherQueue();
       TestDisconnectedEventDelivery();
       await TestSharedRuntime();
+      await TestTypedSdk();
     }
     var queue = new ConcurrentQueue<Action>();
     var registry = new IpcRegistry(action => queue.Enqueue(action));

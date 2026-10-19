@@ -1,0 +1,81 @@
+---
+title: 3. 브라우저에서 조회
+description: 앱을 등록하고 모드가 반환한 설정을 화면에 표시합니다.
+---
+
+이번 단계에서는 **`모드 연결 전` 화면을 실제 조회 결과로 바꿉니다.** 앱 등록, 준비 대기, 조회, 화면 반영을 순서대로 추가합니다.
+
+## 앱 등록과 화면 갱신
+
+`apps/web/src/main.ts`를 다음 diff대로 수정합니다. 기존 `status` 선택 코드는 유지합니다.
+
+```diff title="apps/web/src/main.ts"
+-export {};
+-
++import { ipc } from "adofai-ipc";
++import { SettingsExampleContract, type Settings } from "@example/ipc";
++
++const label = document.querySelector<HTMLInputElement>("#label")!;
++const enabled = document.querySelector<HTMLInputElement>("#enabled")!;
+ const status = document.querySelector<HTMLOutputElement>("#status")!;
+-status.textContent = "모드 연결 전";
++const app = ipc.registerApp({ displayName: "Settings UI" });
++const channel = app.use(SettingsExampleContract, {});
++let disposed = false;
++
++function show(settings: Settings) {
++  label.value = settings.label;
++  enabled.checked = settings.enabled;
++}
+```
+
+`show()`는 모드에서 받은 `Settings`를 입력란에 옮깁니다. 계약에 앱 메서드가 없으므로 `use()`의 handler 인자는 빈 객체입니다.
+
+## 준비 대기 후 조회
+
+같은 파일의 `show()` 아래에 다음 코드를 추가합니다.
+
+```ts title="apps/web/src/main.ts에 추가"
+async function loadSettings() {
+  status.textContent = "연결 중";
+  try {
+    await channel.ready();
+    if (disposed) return;
+    const settings = await channel.getSettings();
+    if (disposed) return;
+    show(settings);
+    status.textContent = "조회 완료";
+  } catch (error) {
+    if (!disposed) status.textContent = `조회 실패: ${String(error)}`;
+  }
+}
+
+window.addEventListener("pagehide", () => {
+  disposed = true;
+  app.dispose();
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) window.location.reload();
+});
+
+void loadSettings();
+```
+
+`ready()`는 모드의 준비 완료를 기다리고, `getSettings()`는 앞 단계의 handler를 호출합니다. 결과를 받은 뒤 `show()`로 화면을 갱신합니다. 실패하면 오류를 상태 영역에 표시합니다.
+
+페이지를 떠날 때 앱 등록을 해제합니다. `disposed`는 늦게 도착한 결과가 종료한 화면을 갱신하지 않게 하며, 뒤로 가기로 캐시된 페이지가 복원되면 새로 등록하도록 새로고침합니다.
+
+## 확인
+
+모드를 활성화한 상태에서 웹 페이지를 새로고침합니다.
+
+| 항목 | 표시할 값 |
+| --- | --- |
+| 표시 문구 | `Example` |
+| 활성화 체크박스 | 선택됨 |
+| 상태 | `조회 완료` |
+
+조회만 구현했으므로 입력란은 계속 비활성 상태입니다. `연결 중`이 계속되면 모드의 `MarkReady()` 호출을, 조회가 실패하면 접속 주소와 `allowedOrigins`를 확인합니다.
+
+[다음: 조회 화면에 저장 기능을 추가합니다 →](/examples/settings/write/)
