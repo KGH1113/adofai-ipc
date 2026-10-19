@@ -3,17 +3,39 @@
   "version": "2.0.0",
   "type": "module",
   "license": "MIT",
-  "main": "./src/index.js",
+  "main": "./dist/index.js",
   "tspMain": "./lib/main.tsp",
-  "exports": { ".": { "typespec": "./lib/main.tsp", "default": "./src/index.js" } },
-  "bin": { "adofai-ipc": "./bin/adofai-ipc.mjs" },
-  "files": ["src", "lib", "bin"],
-  "scripts": {
-    "build": "node --check src/index.js && node --check src/generate.js",
-    "check": "node --check src/index.js && node --check src/generate.js && node --check bin/adofai-ipc.mjs",
-    "test": "node --test test/*.test.mjs"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "typespec": "./lib/main.tsp",
+      "default": "./dist/index.js"
+    }
   },
-  "dependencies": { "@typespec/compiler": "1.17.0", "typescript": "^5.9.3" },
-  "devDependencies": { "adofai-ipc": "workspace:^" },
-  "engines": { "node": ">=22" }
+  "bin": {
+    "adofai-ipc": "./bin/adofai-ipc.mjs"
+  },
+  "files": [
+    "dist",
+    "lib",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "node --test tests/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@typespec/compiler": "1.17.0",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "adofai-ipc": "workspace:^",
+    "@types/node": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "types": "./dist/index.d.ts"
 }

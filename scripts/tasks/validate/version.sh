@@ -13,7 +13,7 @@ if [ -n "$ZIP_PATH" ]; then
   for file in ipc/manifest.json AdofaiIpc.Contracts.dll AdofaiIpc.Loader.dll ipc/AdofaiIpc.Runtime.dll; do
     grep -Fx "$file" <<< "$layout" >/dev/null || fail "ZIP is missing $file"
   done
-  [ "$(unzip -p "$ZIP_PATH" ipc/manifest.json)" = "$(cat "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/manifest.json")" ] || fail "ZIP manifest differs from source"
+  [ "$(unzip -p "$ZIP_PATH" ipc/manifest.json)" = "$(cat "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/src/AdofaiIpc.Runtime/manifest.json")" ] || fail "ZIP manifest differs from source"
   if grep -E 'Info\.json|Bootstrap|Shim|Launcher|Migration|Update/' <<< "$layout" >/dev/null; then
     fail "ZIP contains obsolete common-mod installation artifacts"
   fi

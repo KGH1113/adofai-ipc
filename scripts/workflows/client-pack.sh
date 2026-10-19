@@ -12,4 +12,4 @@ run_task "Check and test npm client" "$TASKS_DIR/test/client.sh"
 
 destination="${ADOFAIIPC_CLIENT_PACK_DESTINATION:-$ADOFAIIPC_PROJECT_ROOT/build}"
 mkdir -p "$destination"
-pnpm --filter @adofai-ipc/client pack --pack-destination "$destination"
+pnpm --filter adofai-ipc pack --pack-destination "$destination"

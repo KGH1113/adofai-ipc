@@ -6,4 +6,4 @@ source "$TASK_DIR/../../lib/context.sh"
 source "$TASK_DIR/../../lib/guards.sh"
 require_command npm
 cd "$ADOFAIIPC_PROJECT_ROOT"
-npm --prefix "$ADOFAIIPC_PROJECT_ROOT/packages/client" run build
+npm --prefix "$ADOFAIIPC_PROJECT_ROOT/packages/adofai-ipc" run build

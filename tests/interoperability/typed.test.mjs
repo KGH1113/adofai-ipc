@@ -1,0 +1,93 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import test from "node:test";
+import { createIpc, defineContract, IpcValidationError } from "../../packages/adofai-ipc/dist/index.js";
+import { Phase, TypedTestContract } from "../../packages/typespec/tests/fixtures/typed/generated/index.js";
+import { until, pause, value, handlers } from "./support.mjs";
+
+test("generated TS methods interoperate with the actual C# runtime and recover after restart", {
+  skip: !process.env.ADOFAIIPC_PROTOCOL_FIXTURE || !globalThis.WebSocket,
+}, async t => {
+  const children = [], apps = [];
+  t.after(() => { for (const app of apps) app.dispose(); for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM"); });
+  async function launch() {
+    const child = spawn(process.env.DOTNET_EXE ?? `${process.env.HOME}/.dotnet/dotnet`, [process.env.ADOFAIIPC_PROTOCOL_FIXTURE, "--serve-typed"], { stdio: ["ignore", "pipe", "pipe"] });
+    children.push(child);
+    let output = "", errors = "", launchError;
+    child.once("error", error => { launchError = error; });
+    child.stdout.on("data", data => { output += data; }); child.stderr.on("data", data => { errors += data; });
+    await until(() => /IPC_TYPED_SERVER_PORT=([0-9]+)/.test(output) || child.exitCode !== null || child.signalCode !== null || launchError);
+    assert.equal(launchError, undefined, String(launchError));
+    assert.equal(child.exitCode, null, errors); assert.equal(child.signalCode, null, errors);
+    return { child, port: Number(output.match(/IPC_TYPED_SERVER_PORT=([0-9]+)/)[1]) };
+  }
+  let server = await launch();
+  const options = { startPort: server.port, endPort: server.port, connectTimeoutMs: 1000, heartbeatIntervalMs: 50, heartbeatTimeoutMs: 300 };
+  function register(displayName, overrides = {}) {
+    const app = createIpc({ ...options, ...overrides }).registerApp({ displayName }); apps.push(app); return app;
+  }
+  const app = register("Interop UI");
+  const pushes = [];
+  const channel = app.use(TypedTestContract, { ...handlers, updated: ({ entry }) => { pushes.push(entry); } });
+  await until(() => pushes.length === 1);
+  assert.equal(channel.status, "ready", "the initial snapshot arrived before registered readiness");
+  await channel.ready();
+  const initialSession = channel.sessionId;
+  assert.ok(initialSession);
+  assert.equal(pushes[0].phase, Phase.Pending);
+  assert.match(app.appId, /^[0-9a-f-]{36}$/);
+  assert.equal(await channel.appId(), app.appId);
+  const entry = { text: "한글 😀", enabled: false, revision: -2147483648 };
+  assert.deepEqual(value(await channel.echo({ entry })), entry);
+  for (const text of ["2024-01-02T03:04:05.0000+03:45", "2026-10-18T00:00:00Z"])
+    assert.equal((await channel.echo({ entry: { ...entry, text } })).text, text, "ISO-looking strings were converted to dates");
+  assert.equal(await channel.add({ left: 2147483646, right: 1 }), 2147483647);
+  assert.equal(Phase.Pending, "pending"); assert.equal(Phase.Done, "done");
+  const rich = { labels: ["한글", ""], maybeLabel: null, ratio: 1.25, count: Number.MAX_SAFE_INTEGER, phase: Phase.Pending, literal: "fixed" };
+  const omitted = await channel.echoRich({ entry: rich });
+  assert.deepEqual(value(omitted), rich);
+  assert.equal(Object.hasOwn(omitted, "omitted"), false); assert.equal(Object.hasOwn(omitted, "optionalNullable"), false);
+  const specified = { ...rich, count: Number.MIN_SAFE_INTEGER, ratio: -2.75, omitted: "present", optionalNullable: null };
+  const returned = await channel.echoRich({ entry: specified });
+  assert.deepEqual(value(returned), specified);
+  assert.equal(Object.hasOwn(returned, "optionalNullable"), true);
+  assert.equal(await channel.noOp(), undefined);
+  assert.equal(await channel.ask({ message: "Continue?" }), true);
+  assert.equal(await channel.ask({ message: "Cancel?" }), false);
+  assert.equal(await channel.appRevision(), 7);
+  await assert.rejects(channel.badResult(), error => error.code === "invalid_result");
+  await assert.rejects(channel.add({ left: 1.5, right: 0 }), IpcValidationError);
+  const second = register("Another tab");
+  const secondChannel = second.use(TypedTestContract, { ...handlers, revision: () => 19 });
+  assert.notEqual(second.appId, app.appId);
+  assert.equal(await secondChannel.appId(), second.appId);
+  assert.equal(await secondChannel.appRevision(), 19);
+  assert.equal(await channel.appRevision(), 7);
+  const wrongHash = register("Old contract");
+  const incompatible = wrongHash.use(defineContract({ ...TypedTestContract, hash: "0".repeat(64) }), handlers);
+  await assert.rejects(incompatible.ready(), error => error.code === "contract_mismatch");
+  wrongHash.dispose();
+  const badApp = register("Bad app handler");
+  const badChannel = badApp.use(TypedTestContract, { ...handlers, revision: () => "7" });
+  await assert.rejects(badChannel.appRevision(), error => error.code === "invalid_result");
+  badApp.dispose();
+  const timeoutApp = register("Timeout", { requestTimeoutMs: 100 });
+  const timed = timeoutApp.use(TypedTestContract, handlers); await timed.ready();
+  await assert.rejects(timed.delay({ milliseconds: 300 }), error => error.code === "timeout");
+  await pause(350); assert.equal(await timed.add({ left: 1, right: 2 }), 3);
+  timeoutApp.dispose();
+  assert.equal(await channel.increment(), 1);
+  const pending = channel.delay({ milliseconds: 30000 });
+  const disconnected = assert.rejects(pending, error => error.code === "unavailable");
+  await pause(30);
+  const exited = once(server.child, "exit"); server.child.kill("SIGTERM"); await exited;
+  await disconnected;
+  const previousPort = server.port; server = await launch(); assert.equal(server.port, previousPort);
+  await channel.ready();
+  await until(() => pushes.length === 2);
+  assert.notEqual(channel.sessionId, initialSession);
+  assert.equal(await channel.appId(), app.appId);
+  assert.equal(await channel.executions(), 0, "reconnect replayed a previous mutation");
+  assert.equal(await channel.appRevision(), 7);
+});

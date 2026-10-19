@@ -12,7 +12,7 @@ const contains = (parent, child) => {
   const relative = path.relative(parent, child);
   return relative === "" || (!relative.startsWith(".." + path.sep) && relative !== ".." && !path.isAbsolute(relative));
 };
-if (contains(destination, root) || ["packages/adofai-ipc", "packages/client", "scripts", ".git"]
+if (contains(destination, root) || ["packages/adofai-ipc", "scripts", ".git"]
   .some(directory => contains(path.join(root, directory), destination)))
   throw new Error("The vendor destination must not replace IPC source files.");
 const sdk = JSON.parse(await fs.readFile(path.join(root, "packages/adofai-ipc/package.json"), "utf8"));
@@ -27,7 +27,7 @@ try {
   await fs.rm(destination, { recursive: true });
 } catch (error) { if (error.code !== "ENOENT") throw error; }
 await build({ entry: [path.join(root, "packages/adofai-ipc/src/index.ts")], outDir: destination,
-  tsconfig: path.join(root, "packages/adofai-ipc/tsconfig.json"), noExternal: ["@adofai-ipc/client"],
+  tsconfig: path.join(root, "packages/adofai-ipc/tsconfig.json"),
   format: ["esm"], platform: "browser", target: "es2020",
   dts: { resolve: true, compilerOptions: { rootDir: path.join(root, "packages/adofai-ipc/src") } }, clean: true });
 await fs.copyFile(path.join(root, "LICENSE"), path.join(destination, "LICENSE"));

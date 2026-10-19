@@ -12,11 +12,11 @@ Usage: ./scripts/run.sh <command>
 Commands:
   build    Build and test the bundled DLLs (no game installation)
   package  Build and verify the DLL bundle ZIP and checksum
-  client   Check the clients, TypeSpec generator and C# integration
-  client-sync  Copy raw SDK source and provenance into a consumer vendor directory
+  client   Check the TypeScript SDK, generator and C# interoperability
+  client-sync  Alias for sdk-sync
   sdk-sync  Export the typed browser SDK with its transport bundled
-  client-pack  Check and pack the npm client to ADOFAIIPC_CLIENT_PACK_DESTINATION
-  check    Validate all shell scripts and version metadata
+  client-pack  Check and pack the SDK to ADOFAIIPC_CLIENT_PACK_DESTINATION
+  check    Validate shell scripts, version metadata and architecture boundaries
   help     Show this help
 USAGE
 }

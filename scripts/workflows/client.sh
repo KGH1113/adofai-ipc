@@ -7,6 +7,6 @@ TASKS_DIR="$SCRIPTS_DIR/tasks"
 source "$SCRIPTS_DIR/lib/logging.sh"
 
 run_task "Validate product version" "$TASKS_DIR/validate/version.sh"
-run_task "Build npm client" "$TASKS_DIR/build/client.sh"
-run_task "Check and test npm client" "$TASKS_DIR/test/client.sh"
+run_task "Build TypeScript SDK" "$TASKS_DIR/build/client.sh"
+run_task "Check and test TypeScript SDK" "$TASKS_DIR/test/client.sh"
 run_task "Check generated SDK and C# interoperability" bash "$TASKS_DIR/test/typed-sdk.sh"

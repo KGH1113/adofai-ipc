@@ -4,13 +4,14 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "check": "pnpm -r check",
+    "check": "node scripts/tasks/validate/architecture.mjs && pnpm -r check",
     "clean": "pnpm -r clean",
     "docs:dev": "pnpm --filter @adofai-ipc/docs dev",
     "docs:build": "pnpm --filter @adofai-ipc/docs build",
     "docs:check": "pnpm --filter @adofai-ipc/docs check",
     "docs:preview": "pnpm --filter @adofai-ipc/docs preview",
-    "ipc:generate": "adofai-ipc generate --config packages/typespec/test/fixtures/typed/adofai-ipc.config.json"
+    "ipc:generate": "pnpm --filter @adofai-ipc/typespec build && adofai-ipc generate --config packages/typespec/tests/fixtures/typed/adofai-ipc.config.json",
+    "check:architecture": "node scripts/tasks/validate/architecture.mjs"
   },
   "devDependencies": {
     "@adofai-ipc/typespec": "workspace:^",

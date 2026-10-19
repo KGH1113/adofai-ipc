@@ -16,5 +16,5 @@ copy_bundle_artifacts() {
   done
   require_file "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.Runtime.dll"
   cp "$ADOFAIIPC_RUNTIME_OUTPUT/AdofaiIpc.Runtime.dll" "$destination/ipc/"
-  cp "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/manifest.json" "$destination/ipc/"
+  cp "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/src/AdofaiIpc.Runtime/manifest.json" "$destination/ipc/"
 }

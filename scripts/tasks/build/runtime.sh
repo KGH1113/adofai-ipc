@@ -6,7 +6,7 @@ source "$TASK_DIR/../../lib/context.sh"
 configuration="${1:-Debug}"
 
 DOTNET_ROOT="$DOTNET_ROOT" DOTNET_ROOT_ARM64="$DOTNET_ROOT_ARM64" \
-  "$DOTNET_EXE" build "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/AdofaiIpc.csproj" \
+  "$DOTNET_EXE" build "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/src/AdofaiIpc.Runtime/AdofaiIpc.Runtime.csproj" \
     --configuration "$configuration" \
     -p:OutputPath="$ADOFAIIPC_RUNTIME_OUTPUT/" \
     -p:AdofaiManaged="$ADOFAI_MANAGED"

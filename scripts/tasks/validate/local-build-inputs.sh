@@ -11,5 +11,5 @@ require_file "$DOTNET_EXE"
 require_dir "$ADOFAI_MANAGED"
 require_file "$ADOFAI_MANAGED/UnityEngine.CoreModule.dll"
 require_file "$ADOFAI_MANAGED/Newtonsoft.Json.dll"
-require_file "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/manifest.json"
+require_file "$ADOFAIIPC_PROJECT_ROOT/AdofaiIpc/src/AdofaiIpc.Runtime/manifest.json"
 require_command node

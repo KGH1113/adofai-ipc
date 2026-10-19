@@ -7,7 +7,7 @@
 [![Standalone](https://img.shields.io/badge/runtime-standalone-059669?style=for-the-badge)](#build-and-package)
 [![Build](https://img.shields.io/badge/build-.NET%20SDK-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Target](https://img.shields.io/badge/target-netstandard2.1-2563eb?style=for-the-badge)](https://learn.microsoft.com/dotnet/standard/net-standard)
-[![Docs](https://img.shields.io/badge/docs-guide-f97316?style=for-the-badge)](packages/docs/README.md)
+[![Docs](https://img.shields.io/badge/docs-guide-f97316?style=for-the-badge)](docs/README.md)
 
 <br />
 
@@ -41,8 +41,25 @@ TypeSpec 계약에서 C#·TypeScript API를 생성합니다. 모드는 `Register
 - 큰 파일을 위한 임시 다운로드 URL과 스트리밍 전송
 - loopback 전용 연결, 메시지·작업 큐 제한, 연결 생존 확인
 
-계약 정의와 API는 [Starlight 문서](packages/docs/README.md)에 있습니다. 모드·앱·계약은 같은 모노레포에서 관리하는 것을 권장합니다.
+계약 정의와 API는 [Starlight 문서](docs/README.md)에 있습니다. 모드·앱·계약은 같은 모노레포에서 관리하는 것을 권장합니다.
 독립 저장소에서는 모드가 계약 원본을 관리하고 웹 저장소에 TS 생성 패키지와 SDK를 고정해 사용합니다.
+
+## Repository structure
+
+```text
+docs/                           # Starlight 개발 문서
+packages/adofai-ipc/             # 통합 TypeScript SDK
+packages/typespec/               # TypeScript로 작성한 TypeSpec 생성기
+AdofaiIpc/src/                   # Contracts · Loader · Runtime
+AdofaiIpc/tests/                 # C# 테스트
+tests/interoperability/          # TS SDK와 실제 C# Runtime DLL의 통합 테스트
+scripts/                        # 빌드 · 검증 · vendor 패키지 생성
+```
+
+SDK와 C# 구현은 공개 API, application, models, ports, adapters, composition으로 나눕니다.
+application은 ports를 통해 전송·직렬화·런타임 로딩을 사용하고, composition에서 실제 구현을 주입합니다.
+TypeSpec 생성기는 계약 해석, 공통 계약 모델, 언어별 emitter와 파일 저장을 분리합니다.
+`./scripts/run.sh check`는 내부 레이어가 adapter 구현을 직접 참조하지 않는지도 검사합니다.
 
 ## Generate APIs
 
@@ -100,7 +117,7 @@ Contracts와 Loader의 AssemblyVersion은 계약 major 1에서 `1.0.0.0`으로 �
 
 ## Documentation
 
-[Starlight 개발 문서](packages/docs/README.md)는 TypeSpec 계약, C#·TypeScript API, 코드 생성과
+[Starlight 개발 문서](docs/README.md)는 TypeSpec 계약, C#·TypeScript API, 코드 생성과
 저장소 구성을 다룹니다. Node.js 22.22 이상과 저장소에 지정된 pnpm으로 `pnpm install` 후
 `pnpm docs:dev`를 실행합니다. `.env`의 게임·.NET 경로는 기존 빌드 설정을 따릅니다.
 

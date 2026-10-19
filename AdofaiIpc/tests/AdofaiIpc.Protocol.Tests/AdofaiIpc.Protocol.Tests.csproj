@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion><Nullable>disable</Nullable><NuGetAudit>false</NuGetAudit>
+    <NoWarn>SYSLIB0014;SYSLIB0039;SYSLIB0045;CS0618</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AdofaiIpc.Contracts/AdofaiIpc.Contracts.csproj" />
+    <ProjectReference Include="../../src/AdofaiIpc.Loader/AdofaiIpc.Loader.csproj" />
+    <ProjectReference Include="../../src/AdofaiIpc.Runtime/AdofaiIpc.Runtime.csproj" />
+    <Compile Include="../../../packages/typespec/tests/fixtures/typed/generated-csharp/*.g.cs" />
+    <Reference Include="Newtonsoft.Json"><HintPath>$(AdofaiManaged)/Newtonsoft.Json.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

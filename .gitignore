@@ -17,3 +17,7 @@ node_modules/
 
 # MacOS Finder Cache
 .DS_Store
+
+# CLI source entry point
+!packages/typespec/bin/
+!packages/typespec/bin/*.mjs
