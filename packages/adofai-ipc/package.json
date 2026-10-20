@@ -1,8 +1,21 @@
 {
   "name": "adofai-ipc",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KGH1113/adofai-ipc.git",
+    "directory": "packages/adofai-ipc"
+  },
+  "homepage": "https://github.com/KGH1113/adofai-ipc#readme",
+  "bugs": {
+    "url": "https://github.com/KGH1113/adofai-ipc/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

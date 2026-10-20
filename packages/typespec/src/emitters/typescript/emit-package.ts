@@ -28,7 +28,7 @@ export function emitTypeScript(contract: Contract, options: GenerationOptions): 
   const packageVersion = options.packageVersion ?? "0.0.0";
   if (typeof packageVersion !== "string" || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(packageVersion)) throw new Error("Invalid generated package version.");
   if (options.packagePrivate !== undefined && typeof options.packagePrivate !== "boolean") throw new Error("Generated package private must be a boolean.");
-  const runtimeDependency = options.runtimeDependency ?? (options.workspace ? "workspace:^" : "^2.0.0");
+  const runtimeDependency = options.runtimeDependency ?? (options.workspace ? "workspace:^" : "^2.1.0");
   if (typeof runtimeDependency !== "string" || !runtimeDependency.trim()) throw new Error("Generated runtimeDependency must be a non-empty package specifier.");
   const packageJson = JSON.stringify({ name: packageName, version: packageVersion, private: options.packagePrivate ?? true, type: "module", adofaiIpcGenerated: true,
     main: "./index.js", types: "./index.d.ts", exports: { ".": { types: "./index.d.ts", default: "./index.js" } },

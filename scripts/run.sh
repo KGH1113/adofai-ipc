@@ -16,6 +16,7 @@ Commands:
   client-sync  Alias for sdk-sync
   sdk-sync  Export the typed browser SDK with its transport bundled
   client-pack  Check and pack the SDK to ADOFAIIPC_CLIENT_PACK_DESTINATION
+  typespec-pack  Check and pack the TypeSpec generator
   check    Validate shell scripts, version metadata and architecture boundaries
   help     Show this help
 USAGE
@@ -28,6 +29,7 @@ case "${1:-help}" in
   client-sync) shift; exec node "$SCRIPTS_DIR/tasks/client/sync-source.mjs" "$@" ;;
   sdk-sync) shift; exec node "$SCRIPTS_DIR/tasks/client/export-sdk.mjs" "$@" ;;
   client-pack) exec "$SCRIPTS_DIR/workflows/client-pack.sh" ;;
+  typespec-pack) exec bash "$SCRIPTS_DIR/workflows/typespec-pack.sh" ;;
   check) exec "$SCRIPTS_DIR/workflows/check-scripts.sh" ;;
   help|-h|--help) usage ;;
   *)

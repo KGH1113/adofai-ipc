@@ -63,11 +63,21 @@ TypeSpec 생성기는 계약 해석, 공통 계약 모델, 언어별 emitter와 
 
 ## Generate APIs
 
+JavaScript SDK는 npm에서 설치합니다. 소비 앱의 `package-lock.json` 또는 동등한 lockfile에
+배포 tarball의 버전과 무결성을 고정합니다.
+
+```bash
+npm install --save-exact adofai-ipc@2.1.0
+```
+
 TypeSpec 계약에서 양쪽 API를 생성합니다. 문자열·불리언·`int32`·`float64`·`safeint`, 배열, nullable,
 optional, 문자열 enum/literal, `void` 반환과 모드→앱 방향의 `ipc.File`을 지원합니다. C#의 optional 필드는 `IpcOptional<T>`로
 생략과 명시적인 `null`을 구분하고, 문자열 enum은 TS 값 상수도 생성합니다.
 파일은 C# `IpcFile.FromPath()`·`FromStream()`·`FromWriter()`로 보내고, TS `ReceivedFile`에서
 `stream()`·`text()`·`arrayBuffer()`·`blob()`으로 한 번 읽습니다. SDK가 전송과 세션 종료 시 정리를 처리합니다.
+큰 파일을 저장할 때는 `await file.download()`로 브라우저 기본 다운로드에 전달합니다.
+전체 본문을 JavaScript 메모리에 올리지 않으며, 저장 위치와 진행 상태는 브라우저가 관리합니다.
+이 호출은 다운로드 요청을 전달하면 완료되고, 디스크 저장 완료를 기다리지는 않습니다.
 
 ```typespec
 import "@adofai-ipc/typespec";
