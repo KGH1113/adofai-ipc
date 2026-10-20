@@ -15,6 +15,8 @@ const rich: RichEntry = { labels: [], maybeLabel: null, ratio: 1.5, count: 90071
 const roundTrip: Promise<RichEntry> = channel.echoRich({ entry: rich });
 const noResult: Promise<void> = channel.noOp();
 const file: Promise<ReceivedFile> = channel.downloadText();
+const download: Promise<void> = file.then(received => received.download());
+void download;
 void file;
 const session: string | undefined = channel.sessionId;
 const off = channel.onStatus((status, error) => { const code: string | undefined = error?.code; void status; void code; });

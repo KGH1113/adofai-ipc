@@ -180,3 +180,94 @@ test("canceling a stream releases its HTTP body and session cleanup is safe afte
   assert.equal(canceled, true); assert.equal(request.signal.aborted, true);
   app.dispose();
 });
+
+function mockDocument(t) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const frames = [];
+  const attached = new Set();
+  class Frame extends EventTarget {
+    attributes = {};
+    setAttribute(name, value) { this.attributes[name] = value; }
+    remove() { attached.delete(this); }
+  }
+  Object.defineProperty(globalThis, "document", { configurable: true, value: {
+    createElement(tag) { assert.equal(tag, "iframe"); const frame = new Frame(); frames.push(frame); return frame; },
+    body: { append(frame) { attached.add(frame); } },
+  } });
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, "document", previous);
+    else delete globalThis.document;
+  });
+  return { frames, attached };
+}
+
+test("browser downloads hand off even very large files without reading or buffering content", async t => {
+  const browser = mockDocument(t);
+  const fetch = mockFile(t);
+  const { channel, transport, app } = setup(t);
+  transport.response = descriptor({ byteLength: 8 * 1024 ** 3 });
+  const file = await channel.file();
+  await file.download();
+  assert.equal(file.used, true);
+  assert.equal(fetch.mock.callCount(), 0);
+  assert.equal(browser.frames.length, 1);
+  const frame = browser.frames[0];
+  assert.equal(frame.src, descriptor().url);
+  assert.equal(frame.hidden, true);
+  assert.equal(frame.tabIndex, -1);
+  assert.equal(frame.referrerPolicy, "no-referrer");
+  assert.equal(frame.attributes["aria-hidden"], "true");
+  assert.equal(browser.attached.size, 1);
+  await assert.rejects(file.download(), /already been read/);
+  assert.throws(() => file.stream(), /already been read/);
+  app.dispose();
+  assert.equal(browser.attached.size, 0);
+});
+
+test("browser downloads reject stale sessions and cannot follow a previous content read", async t => {
+  const browser = mockDocument(t);
+  mockFile(t);
+  const { channel, transport } = setup(t);
+  const read = await channel.file();
+  await read.text();
+  await assert.rejects(read.download(), /already been read/);
+  const stale = await channel.file();
+  transport.disconnect();
+  await assert.rejects(stale.download(), error => error.code === "unavailable");
+  assert.equal(browser.frames.length, 0);
+});
+
+test("browser navigation nodes are released after a response page or session disconnect", async t => {
+  const browser = mockDocument(t);
+  const { channel, transport } = setup(t);
+  await (await channel.file()).download();
+  browser.frames[0].dispatchEvent(new Event("load"));
+  assert.equal(browser.attached.size, 0);
+  await (await channel.file()).download();
+  assert.equal(browser.attached.size, 1);
+  transport.disconnect();
+  assert.equal(browser.attached.size, 0);
+});
+
+test("browser downloads report unsupported environments without fetching a file", async t => {
+  const fetch = mockFile(t);
+  const { channel } = setup(t);
+  await assert.rejects((await channel.file()).download(), error => error.code === "file_download_unavailable");
+  assert.equal(fetch.mock.callCount(), 0);
+  const streamOnly = new ReceivedFile("empty", "text/plain", 0, () => new ReadableStream({ start(output) { output.close(); } }));
+  await assert.rejects(streamOnly.download(), error => error.code === "file_download_unavailable");
+  assert.equal(streamOnly.used, false);
+  assert.equal(await streamOnly.text(), "");
+});
+
+test("mod-initiated callbacks may request a browser download without returning file bytes", async t => {
+  const browser = mockDocument(t);
+  const fetch = mockFile(t);
+  const { channel, transport } = setup(t, async ({ file }) => { await file.download(); return file.size; });
+  await channel.ready();
+  transport.receive({ kind: "command", name: "rpc.app.receive", payload: { callId: "save", sessionId: channel.sessionId, args: { file: descriptor() } } });
+  await pause();
+  assert.equal(transport.sent.find(message => message.correlationId === "save").payload, 3);
+  assert.equal(browser.frames.length, 1);
+  assert.equal(fetch.mock.callCount(), 0);
+});

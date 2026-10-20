@@ -8,6 +8,7 @@ import type { MessageChannel, MessageSession } from "../../ports/message-session
 import { decodeValue } from "../../schemas/decode-value";
 import { IncomingFiles } from "../files/incoming-files";
 import type { FileReader } from "../../ports/file-reader";
+import type { FileDownloader } from "../../ports/file-downloader";
 
 const registrationOutput: ValueSchema = { object: { appId: "string", sessionId: "string" } };
 
@@ -27,8 +28,8 @@ export class ContractBinding {
   private readonly files: IncomingFiles;
   constructor(private readonly app: { appId: string; displayName: string }, private readonly connection: MessageSession,
     private readonly contract: ContractDefinition, handlers: Record<string, unknown>,
-    private readonly signal: AbortSignal, timeoutMs: number, createId: () => string, fileReader?: FileReader) {
-    this.files = new IncomingFiles(fileReader, () => connection.downloadOrigin);
+    private readonly signal: AbortSignal, timeoutMs: number, createId: () => string, fileReader?: FileReader, fileDownloader?: FileDownloader) {
+    this.files = new IncomingFiles(fileReader, () => connection.downloadOrigin, fileDownloader);
     this.raw = connection.namespace(contract.id, 1);
     this.calls = new PendingCalls(() => this.check(), this.raw, contract.models, signal, timeoutMs, createId, this.files.decode);
     this.callbacks = new AppCallDispatcher(this.raw, contract.models, handlers, signal, {

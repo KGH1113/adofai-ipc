@@ -1,11 +1,13 @@
 import { ReceivedFile } from "../../api/received-file";
 import { IpcCallError } from "../../api/errors";
 import type { FileReader } from "../../ports/file-reader";
+import type { FileDownloader } from "../../ports/file-downloader";
 import { decodeFileReference } from "../../schemas/file-reference";
 
 export class IncomingFiles {
   private lifetime = new AbortController();
-  constructor(private readonly reader: FileReader | undefined, private readonly origin: () => string | undefined) {}
+  constructor(private readonly reader: FileReader | undefined, private readonly origin: () => string | undefined,
+    private readonly downloader?: FileDownloader) {}
   decode = (value: unknown): ReceivedFile => {
     const file = decodeFileReference(value, this.origin());
     const lifetime = this.lifetime.signal;
@@ -47,7 +49,10 @@ export class IncomingFiles {
         },
         async cancel(reason) { try { await reader!.cancel(reason); } finally { cleanup(); } },
       }, { highWaterMark: 0 });
-    });
+    }, this.downloader ? () => {
+      if (lifetime.aborted) throw lifetime.reason;
+      this.downloader!({ url: file.url, signal: lifetime });
+    } : undefined);
   };
   invalidate(reason = new IpcCallError("unavailable", "The file's app session disconnected. Request a new file after reconnecting.")): void {
     this.lifetime.abort(reason); this.lifetime = new AbortController();
