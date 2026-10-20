@@ -16,7 +16,7 @@ export interface AppCallSession {
 export class AppCallDispatcher {
   constructor(private readonly raw: MessageChannel, private readonly models: Models,
     private readonly handlers: Record<string, unknown>, private readonly signal: AbortSignal,
-    private readonly session: AppCallSession) {}
+    private readonly session: AppCallSession, private readonly file?: (value: unknown) => unknown) {}
   async handle(name: string, method: MethodDefinition, payload: unknown, message: IpcMessage): Promise<void> {
     const connectionId = this.session.connectionId();
     const epoch = this.session.epoch();
@@ -36,7 +36,7 @@ export class AppCallDispatcher {
       await registration.promise;
       if (epoch !== this.session.epoch() || connectionId !== this.session.connectionId() || envelope.sessionId !== this.session.id()) return;
       this.session.check();
-      const request = decodeValue(method.input, envelope.args, this.models);
+      const request = decodeValue(method.input, envelope.args, this.models, "$", 0, this.file);
       code = "handler_failed";
       const handler = this.handlers[name] as (input: unknown) => unknown;
       const result = await handler(request);

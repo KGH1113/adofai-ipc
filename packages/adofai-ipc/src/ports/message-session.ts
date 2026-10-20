@@ -5,6 +5,7 @@ import type { IpcConnectionState, IpcErrorInfo, IpcMessage, IpcNamespaceStatus }
 export interface MessageSession {
   readonly state: IpcConnectionState;
   readonly connectionId: string | undefined;
+  readonly downloadOrigin?: string;
   start(): Promise<void>;
   close(): void;
   checkConnection(): void;

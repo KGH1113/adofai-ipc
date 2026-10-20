@@ -2,6 +2,7 @@ import type { Schema } from "../../models/contract.js";
 import { quote } from "../../models/names.js";
 
 export function tsType(schema: Schema): string {
+  if (schema === "file") return "ReceivedFile";
   if (typeof schema === "string") return ["int32", "float64", "safeint"].includes(schema) ? "number" : schema;
   if ("model" in schema) return schema.model;
   if ("optional" in schema) return tsType(schema.optional);

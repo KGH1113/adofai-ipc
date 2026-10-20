@@ -59,7 +59,8 @@ internal sealed class ModRegistrationService<TApp> : IDisposable where TApp : Ip
     _protocol = protocol ?? throw new ArgumentNullException(nameof(protocol));
     _contract = contract ?? throw new ArgumentNullException(nameof(contract));
     _lifetimeToken = _lifetime.Token;
-    _calls = new AppCalls<TApp>(_gate, _protocol, Check, identity => _apps.TryGetValue(identity.Client.ConnectionId, out var active) && ReferenceEquals(active, identity));
+    _calls = new AppCalls<TApp>(_gate, _protocol, Check, identity => _apps.TryGetValue(identity.Client.ConnectionId, out var active) && ReferenceEquals(active, identity),
+      (session, call) => new FileTransferScope(_registration, session, call));
     if (string.IsNullOrWhiteSpace(displayName) || displayName.Length > 200) throw new ArgumentException("A display name of 1–200 characters is required.", nameof(displayName));
     if (allowedOrigins == null || allowedOrigins.Length == 0) throw new ArgumentException("Specify the allowed browser origins explicitly.", nameof(allowedOrigins));
     _origins = (string[])allowedOrigins.Clone();
@@ -99,11 +100,14 @@ internal sealed class ModRegistrationService<TApp> : IDisposable where TApp : Ip
         try { result = await handler(request, new ModCallContext<TApp>(identity.App, message.CancellationToken)).ConfigureAwait(false); }
         catch (IpcCallException error) { message.Reject(error.Code, error.Message); return; }
         catch (IpcValidationException error) { message.Reject("invalid_result", error.Message); return; }
-        message.CancellationToken.ThrowIfCancellationRequested();
         string json;
-        try { json = method.Output.Write(result); }
+        using var files = new FileTransferScope(_registration, identity.Cancellation, message.CancellationToken);
+        try { json = method.Output.Write(result, files); }
+        catch (IpcCallException error) { message.Reject(error.Code, error.Message); return; }
         catch (IpcValidationException error) { message.Reject("invalid_result", error.Message); return; }
+        message.CancellationToken.ThrowIfCancellationRequested();
         message.Reply("rpc.result", json);
+        files.Commit();
       });
     }
   }

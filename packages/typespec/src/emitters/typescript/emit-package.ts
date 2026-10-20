@@ -2,6 +2,7 @@ import ts from "typescript";
 import type { Contract, GenerationOptions, SourceFiles } from "../../models/contract.js";
 import { quote } from "../../models/names.js";
 import { tsType } from "./type-name.js";
+import { containsFile } from "../../models/contract.js";
 
 export function emitTypeScript(contract: Contract, options: GenerationOptions): SourceFiles {
   const name = contract.name;
@@ -9,6 +10,8 @@ export function emitTypeScript(contract: Contract, options: GenerationOptions): 
   if (!/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(packageName)) throw new Error("Invalid generated package name.");
   const declarations = [
     'import { defineContract, type IpcContract } from "adofai-ipc";',
+    ...(Object.values(contract.models).some(model => containsFile(model, contract.models)) || [...Object.values(contract.mod), ...Object.values(contract.app)].some(method => containsFile(method.input, contract.models) || containsFile(method.output, contract.models))
+      ? ['import type { ReceivedFile } from "adofai-ipc";'] : []),
     ...Object.entries(contract.enums).flatMap(([enumeration, members]) => [
       `export const ${enumeration}: { ${Object.entries(members).map(([member, value]) => `readonly ${quote(member)}: ${quote(value)}`).join("; ")} } = Object.freeze({ ${Object.entries(members).map(([member, value]) => `[${quote(member)}]: ${quote(value)}`).join(", ")} } as const);`,
       `export type ${enumeration} = typeof ${enumeration}[keyof typeof ${enumeration}];`,

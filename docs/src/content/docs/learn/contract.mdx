@@ -69,6 +69,9 @@ TypeScript에서는 `displayName: string`, `revision: number`가 되고, C#에�
 | `"fixed"` / `"a" \| "b"` | 문자열 literal / literal union | 검증하는 `string` |
 | 문자열 enum | 값 상수와 같은 이름의 union 타입 | 문자열로 직렬화하는 `enum` |
 | `void` 반환값 | `Promise<void>` | `Task` handler |
+| `ipc.File` | `ReceivedFile` | `IpcFile` |
+
+`ipc.File`은 모드의 반환값과 앱 메서드의 인자에 사용합니다. 배열·nullable·optional 필드에도 넣을 수 있습니다. 전송 방법은 [파일 전송](/reference/files/)을 참고하세요.
 
 ## 생략과 null
 

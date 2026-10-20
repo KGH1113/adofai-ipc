@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import test from "node:test";
-import { createIpc, defineContract, IpcValidationError } from "../../packages/adofai-ipc/dist/index.js";
+import { createIpc, defineContract, IpcValidationError, ReceivedFile } from "../../packages/adofai-ipc/dist/index.js";
 import { Phase, TypedTestContract } from "../../packages/typespec/tests/fixtures/typed/generated/index.js";
 import { until, pause, value, handlers } from "./support.mjs";
 
@@ -56,6 +56,21 @@ test("generated TS methods interoperate with the actual C# runtime and recover a
   assert.equal(await channel.ask({ message: "Continue?" }), true);
   assert.equal(await channel.ask({ message: "Cancel?" }), false);
   assert.equal(await channel.appRevision(), 7);
+  const download = await channel.downloadText();
+  assert.ok(download instanceof ReceivedFile);
+  assert.equal(download.name, "example.txt"); assert.equal(download.type, "text/plain; charset=utf-8");
+  assert.equal(await download.text(), "IPC file · 한글 😀\n");
+  const bundle = await channel.downloadBundle();
+  assert.equal(bundle.optional, null);
+  assert.equal(await bundle.content.text(), "IPC file · 한글 😀\n");
+  assert.equal((await bundle.files[0].arrayBuffer()).byteLength, 0);
+  let pushedFile;
+  const fileApp = register("File receiving tab", { host: "localhost" });
+  const files = fileApp.use(TypedTestContract, { ...handlers, receiveFile: async ({ file }) => { pushedFile = file; return (await file.arrayBuffer()).byteLength; } });
+  assert.equal(await files.pushFile(), new TextEncoder().encode("IPC file · 한글 😀\n").length);
+  assert.ok(pushedFile instanceof ReceivedFile);
+  fileApp.dispose();
+  const staleFile = await channel.downloadText();
   await assert.rejects(channel.badResult(), error => error.code === "invalid_result");
   await assert.rejects(channel.add({ left: 1.5, right: 0 }), IpcValidationError);
   const second = register("Another tab");
@@ -83,6 +98,7 @@ test("generated TS methods interoperate with the actual C# runtime and recover a
   await pause(30);
   const exited = once(server.child, "exit"); server.child.kill("SIGTERM"); await exited;
   await disconnected;
+  assert.throws(() => staleFile.stream(), error => error.code === "unavailable");
   const previousPort = server.port; server = await launch(); assert.equal(server.port, previousPort);
   await channel.ready();
   await until(() => pushes.length === 2);

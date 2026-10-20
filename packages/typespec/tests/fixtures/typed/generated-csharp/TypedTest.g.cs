@@ -22,6 +22,13 @@ public sealed class Entry
   [JsonProperty("text")] public string Text { get; set; } = default!;
 }
 
+public sealed class FileBundle
+{
+  [JsonProperty("content")] public IpcFile Content { get; set; } = default!;
+  [JsonProperty("files")] public IpcFile[] Files { get; set; } = default!;
+  [JsonProperty("optional")] public IpcOptional<IpcFile?> Optional { get; set; } = default!;
+}
+
 public sealed class RichEntry
 {
   [JsonProperty("count")] public long Count { get; set; } = default!;
@@ -65,6 +72,11 @@ public sealed class ConfirmRequest
   [JsonProperty("message")] public string Message { get; set; } = default!;
 }
 
+public sealed class ReceiveFileRequest
+{
+  [JsonProperty("file")] public IpcFile File { get; set; } = default!;
+}
+
 public sealed class UpdatedRequest
 {
   [JsonProperty("entry")] public RichEntry Entry { get; set; } = default!;
@@ -73,6 +85,7 @@ public sealed class UpdatedRequest
 internal static class TypedTestSchemas
 {
   internal static IpcSchema Entry() => IpcSchema.Object(IpcSchema.Field("enabled", IpcSchema.Boolean), IpcSchema.Field("revision", IpcSchema.Int32), IpcSchema.Field("text", IpcSchema.String));
+  internal static IpcSchema FileBundle() => IpcSchema.Object(IpcSchema.Field("content", IpcSchema.File), IpcSchema.Field("files", IpcSchema.Array(IpcSchema.File)), IpcSchema.Field("optional", IpcSchema.Optional(IpcSchema.Nullable(IpcSchema.File))));
   internal static IpcSchema RichEntry() => IpcSchema.Object(IpcSchema.Field("count", IpcSchema.SafeInt), IpcSchema.Field("labels", IpcSchema.Array(IpcSchema.String)), IpcSchema.Field("literal", IpcSchema.StringLiteral("fixed")), IpcSchema.Field("maybeLabel", IpcSchema.Nullable(IpcSchema.String)), IpcSchema.Field("omitted", IpcSchema.Optional(IpcSchema.String)), IpcSchema.Field("optionalNullable", IpcSchema.Optional(IpcSchema.Nullable(IpcSchema.String))), IpcSchema.Field("phase", IpcSchema.StringEnum("done", "pending")), IpcSchema.Field("ratio", IpcSchema.Float64));
 }
 
@@ -84,16 +97,20 @@ public static class TypedTestMethods
   public static readonly IpcMethod<AskRequest, bool> Ask = new IpcMethod<AskRequest, bool>("ask", "rpc.mod.ask", new IpcCodec<AskRequest>(IpcSchema.Object(IpcSchema.Field("message", IpcSchema.String))), new IpcCodec<bool>(IpcSchema.Boolean));
   public static readonly IpcMethod<IpcUnit, string> BadResult = new IpcMethod<IpcUnit, string>("badResult", "rpc.mod.badresult", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<string>(IpcSchema.String));
   public static readonly IpcMethod<DelayRequest, bool> Delay = new IpcMethod<DelayRequest, bool>("delay", "rpc.mod.delay", new IpcCodec<DelayRequest>(IpcSchema.Object(IpcSchema.Field("milliseconds", IpcSchema.Int32))), new IpcCodec<bool>(IpcSchema.Boolean));
+  public static readonly IpcMethod<IpcUnit, FileBundle> DownloadBundle = new IpcMethod<IpcUnit, FileBundle>("downloadBundle", "rpc.mod.downloadbundle", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<FileBundle>(TypedTestSchemas.FileBundle()));
+  public static readonly IpcMethod<IpcUnit, IpcFile> DownloadText = new IpcMethod<IpcUnit, IpcFile>("downloadText", "rpc.mod.downloadtext", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<IpcFile>(IpcSchema.File));
   public static readonly IpcMethod<EchoRequest, Entry> Echo = new IpcMethod<EchoRequest, Entry>("echo", "rpc.mod.echo", new IpcCodec<EchoRequest>(IpcSchema.Object(IpcSchema.Field("entry", TypedTestSchemas.Entry()))), new IpcCodec<Entry>(TypedTestSchemas.Entry()));
   public static readonly IpcMethod<EchoRichRequest, RichEntry> EchoRich = new IpcMethod<EchoRichRequest, RichEntry>("echoRich", "rpc.mod.echorich", new IpcCodec<EchoRichRequest>(IpcSchema.Object(IpcSchema.Field("entry", TypedTestSchemas.RichEntry()))), new IpcCodec<RichEntry>(TypedTestSchemas.RichEntry()));
   public static readonly IpcMethod<IpcUnit, int> Executions = new IpcMethod<IpcUnit, int>("executions", "rpc.mod.executions", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<int>(IpcSchema.Int32));
   public static readonly IpcMethod<IpcUnit, int> Increment = new IpcMethod<IpcUnit, int>("increment", "rpc.mod.increment", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<int>(IpcSchema.Int32));
   public static readonly IpcMethod<IpcUnit, IpcUnit> NoOp = new IpcMethod<IpcUnit, IpcUnit>("noOp", "rpc.mod.noop", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<IpcUnit>(IpcSchema.Null));
+  public static readonly IpcMethod<IpcUnit, long> PushFile = new IpcMethod<IpcUnit, long>("pushFile", "rpc.mod.pushfile", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<long>(IpcSchema.SafeInt));
 }
 
 internal static class TypedTestAppMethods
 {
   public static readonly IpcMethod<ConfirmRequest, bool> Confirm = new IpcMethod<ConfirmRequest, bool>("confirm", "rpc.app.confirm", new IpcCodec<ConfirmRequest>(IpcSchema.Object(IpcSchema.Field("message", IpcSchema.String))), new IpcCodec<bool>(IpcSchema.Boolean));
+  public static readonly IpcMethod<ReceiveFileRequest, long> ReceiveFile = new IpcMethod<ReceiveFileRequest, long>("receiveFile", "rpc.app.receivefile", new IpcCodec<ReceiveFileRequest>(IpcSchema.Object(IpcSchema.Field("file", IpcSchema.File))), new IpcCodec<long>(IpcSchema.SafeInt));
   public static readonly IpcMethod<IpcUnit, int> Revision = new IpcMethod<IpcUnit, int>("revision", "rpc.app.revision", new IpcCodec<IpcUnit>(IpcSchema.Object()), new IpcCodec<int>(IpcSchema.Int32));
   public static readonly IpcMethod<UpdatedRequest, IpcUnit> Updated = new IpcMethod<UpdatedRequest, IpcUnit>("updated", "rpc.app.updated", new IpcCodec<UpdatedRequest>(IpcSchema.Object(IpcSchema.Field("entry", TypedTestSchemas.RichEntry()))), new IpcCodec<IpcUnit>(IpcSchema.Null));
 }
@@ -102,6 +119,7 @@ public sealed class TypedTestApp : IpcApp
 {
   public TypedTestApp(IpcAppInvoker invoker) : base(invoker) { }
   public Task<bool> ConfirmAsync(ConfirmRequest request, CancellationToken cancellationToken = default) => InvokeAsync(TypedTestAppMethods.Confirm, request, cancellationToken);
+  public Task<long> ReceiveFileAsync(ReceiveFileRequest request, CancellationToken cancellationToken = default) => InvokeAsync(TypedTestAppMethods.ReceiveFile, request, cancellationToken);
   public Task<int> RevisionAsync(CancellationToken cancellationToken = default) => InvokeAsync(TypedTestAppMethods.Revision, IpcUnit.Value, cancellationToken);
   public Task UpdatedAsync(UpdatedRequest request, CancellationToken cancellationToken = default) => InvokeVoidAsync(TypedTestAppMethods.Updated, request, cancellationToken);
 }
@@ -109,5 +127,5 @@ public sealed class TypedTestApp : IpcApp
 public sealed class TypedTestContract : ModContract<TypedTestApp>
 {
   public static readonly TypedTestContract Instance = new TypedTestContract();
-  private TypedTestContract() : base("typed-test", "c2ea2ea73584f5b0db8daacd4a84f6c6c0d75f84265369dd79a0d08bbb412b84", new IpcMethod[] { TypedTestMethods.Add, TypedTestMethods.AppId, TypedTestMethods.AppRevision, TypedTestMethods.Ask, TypedTestMethods.BadResult, TypedTestMethods.Delay, TypedTestMethods.Echo, TypedTestMethods.EchoRich, TypedTestMethods.Executions, TypedTestMethods.Increment, TypedTestMethods.NoOp }, invoker => new TypedTestApp(invoker)) { }
+  private TypedTestContract() : base("typed-test", "4a296d5ec03576a9dfaae0ba5b1647f9d7e9780bd92678f55003dadc1adba143", new IpcMethod[] { TypedTestMethods.Add, TypedTestMethods.AppId, TypedTestMethods.AppRevision, TypedTestMethods.Ask, TypedTestMethods.BadResult, TypedTestMethods.Delay, TypedTestMethods.DownloadBundle, TypedTestMethods.DownloadText, TypedTestMethods.Echo, TypedTestMethods.EchoRich, TypedTestMethods.Executions, TypedTestMethods.Increment, TypedTestMethods.NoOp, TypedTestMethods.PushFile }, invoker => new TypedTestApp(invoker)) { }
 }

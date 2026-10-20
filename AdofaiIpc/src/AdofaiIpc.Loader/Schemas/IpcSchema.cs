@@ -17,6 +17,9 @@ public sealed class IpcSchema
   public static readonly IpcSchema Float64 = new IpcSchema("float64");
   public static readonly IpcSchema SafeInt = new IpcSchema("safeint");
   public static readonly IpcSchema Null = new IpcSchema("null");
+  public static readonly IpcSchema File = new IpcSchema("file", new Dictionary<string, IpcSchema>(StringComparer.Ordinal) {
+    { "url", String }, { "byteLength", SafeInt }, { "fileName", String }, { "contentType", String }
+  });
   internal bool IsNull => _kind == "null";
   public static IpcSchema Array(IpcSchema element) => new IpcSchema("array", element: Required(element));
   public static IpcSchema Nullable(IpcSchema element) => new IpcSchema("nullable", element: Required(element));

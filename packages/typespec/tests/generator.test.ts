@@ -168,6 +168,53 @@ test("nullable enum unions and nullable return types retain their named constant
   assert.match(output.csharp["Demo.g.cs"]!, /IpcMethod<IpcUnit, string\?\[\]\?> All/);
 });
 
+test("ipc.File generates opaque single-use files in mod results and app parameters", async t => {
+  const { program } = await source(t, `@ipc.mod("demo") namespace Demo {
+    alias Attachment = ipc.File;
+    model Bundle { content: Attachment; others: (ipc.File | null)[]; optional?: ipc.File | null; }
+    op download(): Bundle;
+    op direct(): ipc.File;
+    @ipc.app interface Browser { receive(bundle: Bundle): void; }
+  }`);
+  valid(program);
+  const output = renderContract(program);
+  assert.equal(output.contract.mod.direct!.output, "file");
+  assert.equal(output.contract.models.Bundle!.object.content, "file");
+  assert.deepEqual(output.contract.models.Bundle!.object.others, { array: { nullable: "file" } });
+  assert.deepEqual(output.contract.models.Bundle!.object.optional, { optional: { nullable: "file" } });
+  assert.equal(output.contract.models.File, undefined);
+  assert.match(output.typescript["index.d.ts"]!, /import type .*ReceivedFile.* from "adofai-ipc"/);
+  assert.match(output.typescript["index.d.ts"]!, /content: ReceivedFile/);
+  assert.match(output.typescript["index.d.ts"]!, /optional\?: ReceivedFile \| null/);
+  assert.match(output.csharp["Demo.g.cs"]!, /public IpcFile Content/);
+  assert.match(output.csharp["Demo.g.cs"]!, /IpcOptional<IpcFile\?> Optional/);
+  assert.match(output.csharp["Demo.g.cs"]!, /IpcSchema.File/);
+  const ordinary = await source(t, '@ipc.mod("demo") namespace Demo { model File {} op direct(): File; }');
+  valid(ordinary.program);
+  const normal = renderContract(ordinary.program);
+  assert.deepEqual(normal.contract.mod.direct!.output, { model: "File" });
+  assert.doesNotMatch(normal.typescript["index.d.ts"]!, /ReceivedFile/);
+  assert.notEqual(normal.contract.hash, output.contract.hash);
+});
+
+for (const body of [
+  'op upload(file: ipc.File): void;',
+  'model Bundle { files: (ipc.File | null)[]; } op upload(bundle?: Bundle): void;',
+  '@ipc.app interface Browser { upload(): ipc.File; }',
+  'model Bundle { file?: ipc.File | null; } @ipc.app interface Browser { upload(): Bundle; }',
+]) test(`file uploads are rejected: ${body}`, async t => {
+  const { program } = await source(t, `@ipc.mod("demo") namespace Demo { ${body} }`);
+  valid(program);
+  assert.throws(() => renderContract(program), /app-to-mod uploads are not supported/);
+});
+
+for (const body of ['model Attachment extends ipc.File {}', 'model Attachment is ipc.File;', 'model Attachment { ...ipc.File; }', 'model Base extends ipc.File {} model Attachment extends Base {}'])
+  test(`file inheritance and copying are rejected: ${body}`, async t => {
+    const { program } = await source(t, `@ipc.mod("demo") namespace Demo { ${body} op read(): Attachment; }`);
+    valid(program);
+    assert.throws(() => renderContract(program), /extending or copying/);
+  });
+
 test("generated vendor package metadata is configurable without workspace dependencies", async t => {
   const { program } = await source(t, '@ipc.mod("demo") namespace Demo { op read(): string; }');
   valid(program);

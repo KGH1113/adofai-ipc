@@ -2,8 +2,12 @@ import type { Models, ValueSchema } from "../models/value-schema";
 import { IpcValidationError } from "../api/validation-error";
 
 /** Validate and copy values so getters, prototypes and toJSON cannot change the wire data. */
-export function decodeValue(schema: ValueSchema, value: unknown, models: Models, path = "$", depth = 0): unknown {
+export function decodeValue(schema: ValueSchema, value: unknown, models: Models, path = "$", depth = 0, file?: (value: unknown) => unknown): unknown {
   if (depth > 32) throw new IpcValidationError(path, "Maximum data depth exceeded.");
+  if (schema === "file") {
+    if (!file) throw new IpcValidationError(path, "Files may only be received from a mod.");
+    return file(value);
+  }
   if (schema === "string" || schema === "boolean") {
     if (typeof value !== schema) throw new IpcValidationError(path, `Expected ${schema}.`);
     return value;
@@ -22,8 +26,8 @@ export function decodeValue(schema: ValueSchema, value: unknown, models: Models,
     if (value !== null) throw new IpcValidationError(path, "Expected a null wire value for a void result.");
     return undefined;
   }
-  if ("nullable" in schema) return value === null ? null : decodeValue(schema.nullable, value, models, path, depth + 1);
-  if ("optional" in schema) return value === undefined ? undefined : decodeValue(schema.optional, value, models, path, depth + 1);
+  if ("nullable" in schema) return value === null ? null : decodeValue(schema.nullable, value, models, path, depth + 1, file);
+  if ("optional" in schema) return value === undefined ? undefined : decodeValue(schema.optional, value, models, path, depth + 1, file);
   if ("enum" in schema) {
     if (typeof value !== "string" || !schema.enum.includes(value))
       throw new IpcValidationError(path, `Expected one of: ${schema.enum.map(item => JSON.stringify(item)).join(", ")}.`);
@@ -39,14 +43,14 @@ export function decodeValue(schema: ValueSchema, value: unknown, models: Models,
     for (let index = 0; index < value.length; index++) {
       const property = Object.getOwnPropertyDescriptor(value, index);
       if (!property || !("value" in property)) throw new IpcValidationError(`${path}[${index}]`, "An array element is required.");
-      result.push(decodeValue(schema.array, property.value, models, `${path}[${index}]`, depth + 1));
+      result.push(decodeValue(schema.array, property.value, models, `${path}[${index}]`, depth + 1, file));
     }
     return result;
   }
   if ("model" in schema) {
     const model = Object.hasOwn(models, schema.model) ? models[schema.model] : undefined;
     if (!model) throw new IpcValidationError(path, `Unknown model ${schema.model}.`);
-    return decodeValue(model, value, models, path, depth + 1);
+    return decodeValue(model, value, models, path, depth + 1, file);
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new IpcValidationError(path, "Expected an object.");
   const fields = schema.object;
@@ -60,7 +64,7 @@ export function decodeValue(schema: ValueSchema, value: unknown, models: Models,
     if (!property && optional) continue;
     if (!property || !("value" in property)) throw new IpcValidationError(`${path}.${key}`, "A data field is required.");
     if (optional && property.value === undefined) continue;
-    result[key] = decodeValue(field, property.value, models, `${path}.${key}`, depth + 1);
+    result[key] = decodeValue(field, property.value, models, `${path}.${key}`, depth + 1, file);
   }
   return result;
 }

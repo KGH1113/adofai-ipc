@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AdofaiIpc.Runtime;
 
-internal sealed class FeatureRegistration : IFeatureRegistration
+internal sealed class FeatureRegistration : IFeatureRegistration, IFeatureDownloads
 {
   private readonly Action<IFeatureRegistration> _release;
   private readonly Action<Action> _dispatch;
@@ -50,6 +50,22 @@ internal sealed class FeatureRegistration : IFeatureRegistration
   { Check(); return Handle.SendToConnection(peerId, connectionId, kind, name, RuntimeJson.Parse(json), correlationId); }
   internal bool IsConnectionActive(string peerId, string connectionId) => Volatile.Read(ref _disposed) == 0 && Handle.IsConnectionActive(peerId, connectionId);
   internal CancellationToken ConnectionLifetime(string peerId, string connectionId) => Handle.ConnectionLifetime(peerId, connectionId);
+  public IpcFileTicket ExportFile(Stream stream, long byteLength, string fileName, string contentType, CancellationToken sessionCancellation, CancellationToken callCancellation)
+  {
+    IpcDownloadSource source = null;
+    try
+    {
+      source = new IpcDownloadSource(stream, byteLength, fileName, contentType);
+      Check(); return Handle.ExportFile(source, sessionCancellation, callCancellation);
+    }
+    catch { if (source != null) source.Dispose(); else stream?.Dispose(); throw; }
+  }
+  public IpcFileTicket ExportFile(Action<Stream> writer, long byteLength, string fileName, string contentType, CancellationToken sessionCancellation, CancellationToken callCancellation)
+  {
+    var source = new IpcDownloadSource(writer, byteLength, fileName, contentType);
+    try { Check(); return Handle.ExportFile(source, sessionCancellation, callCancellation); }
+    catch { source.Dispose(); throw; }
+  }
   public void Dispose()
   {
     if (Interlocked.Exchange(ref _disposed, 1) != 0) return;

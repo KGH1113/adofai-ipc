@@ -3,13 +3,26 @@ import { defineContract } from "adofai-ipc";
 export const Phase = Object.freeze({ ["Done"]: "done", ["Pending"]: "pending" });
 export const TypedTestContract = defineContract({
     "id": "typed-test",
-    "hash": "c2ea2ea73584f5b0db8daacd4a84f6c6c0d75f84265369dd79a0d08bbb412b84",
+    "hash": "4a296d5ec03576a9dfaae0ba5b1647f9d7e9780bd92678f55003dadc1adba143",
     "models": {
         "Entry": {
             "object": {
                 "enabled": "boolean",
                 "revision": "int32",
                 "text": "string"
+            }
+        },
+        "FileBundle": {
+            "object": {
+                "content": "file",
+                "files": {
+                    "array": "file"
+                },
+                "optional": {
+                    "optional": {
+                        "nullable": "file"
+                    }
+                }
             }
         },
         "RichEntry": {
@@ -95,6 +108,22 @@ export const TypedTestContract = defineContract({
             },
             "output": "boolean"
         },
+        "downloadBundle": {
+            "wireName": "rpc.mod.downloadbundle",
+            "input": {
+                "object": {}
+            },
+            "output": {
+                "model": "FileBundle"
+            }
+        },
+        "downloadText": {
+            "wireName": "rpc.mod.downloadtext",
+            "input": {
+                "object": {}
+            },
+            "output": "file"
+        },
         "echo": {
             "wireName": "rpc.mod.echo",
             "input": {
@@ -141,6 +170,13 @@ export const TypedTestContract = defineContract({
                 "object": {}
             },
             "output": "void"
+        },
+        "pushFile": {
+            "wireName": "rpc.mod.pushfile",
+            "input": {
+                "object": {}
+            },
+            "output": "safeint"
         }
     },
     "app": {
@@ -152,6 +188,15 @@ export const TypedTestContract = defineContract({
                 }
             },
             "output": "boolean"
+        },
+        "receiveFile": {
+            "wireName": "rpc.app.receivefile",
+            "input": {
+                "object": {
+                    "file": "file"
+                }
+            },
+            "output": "safeint"
         },
         "revision": {
             "wireName": "rpc.app.revision",

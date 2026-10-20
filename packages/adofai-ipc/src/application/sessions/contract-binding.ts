@@ -6,6 +6,8 @@ import type { ContractDefinition } from "../../models/contract";
 import type { ValueSchema } from "../../models/value-schema";
 import type { MessageChannel, MessageSession } from "../../ports/message-session";
 import { decodeValue } from "../../schemas/decode-value";
+import { IncomingFiles } from "../files/incoming-files";
+import type { FileReader } from "../../ports/file-reader";
 
 const registrationOutput: ValueSchema = { object: { appId: "string", sessionId: "string" } };
 
@@ -22,15 +24,17 @@ export class ContractBinding {
   private sessionId: string | undefined;
   private epoch = 0;
   private disposed = false;
+  private readonly files: IncomingFiles;
   constructor(private readonly app: { appId: string; displayName: string }, private readonly connection: MessageSession,
     private readonly contract: ContractDefinition, handlers: Record<string, unknown>,
-    private readonly signal: AbortSignal, timeoutMs: number, createId: () => string) {
+    private readonly signal: AbortSignal, timeoutMs: number, createId: () => string, fileReader?: FileReader) {
+    this.files = new IncomingFiles(fileReader, () => connection.downloadOrigin);
     this.raw = connection.namespace(contract.id, 1);
-    this.calls = new PendingCalls(() => this.check(), this.raw, contract.models, signal, timeoutMs, createId);
+    this.calls = new PendingCalls(() => this.check(), this.raw, contract.models, signal, timeoutMs, createId, this.files.decode);
     this.callbacks = new AppCallDispatcher(this.raw, contract.models, handlers, signal, {
       check: () => this.check(), connectionId: () => connection.connectionId, epoch: () => this.epoch,
       id: () => this.sessionId, registration: () => this.registration, disposed: () => this.disposed,
-    });
+    }, this.files.decode);
     const api: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     api.ready = () => this.ready();
     api.onStatus = (listener: (status: ChannelStatus, error?: IpcCallError) => void) => {
@@ -67,10 +71,12 @@ export class ContractBinding {
       } else {
         this.epoch++; this.sessionId = undefined; this.registration = undefined;
         const reason = new IpcCallError(error?.code ?? "unavailable", error?.message ?? "The mod is no longer available.");
+        this.files.invalidate(reason);
         this.calls.failAll(reason); this.setStatus(status, status === "error" ? reason : undefined);
       }
     }));
     const abort = () => {
+      this.files.invalidate(signal.reason);
       this.epoch++; this.sessionId = undefined;
       this.calls.failAll(signal.reason);
       this.setStatus("error", signal.reason instanceof IpcCallError ? signal.reason : new IpcCallError("disposed", "The app registration has been disposed."));
@@ -118,6 +124,7 @@ export class ContractBinding {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true; this.epoch++; this.sessionId = undefined;
+    this.files.invalidate();
     this.calls.failAll(new IpcCallError("disposed", "The channel has been disposed."));
     this.setStatus("unavailable"); this.statuses.clear();
     for (const off of this.cleanup.splice(0)) off();

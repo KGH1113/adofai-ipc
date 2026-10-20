@@ -7,4 +7,5 @@ public sealed class IpcCodec<T> {
   internal IpcCodec(IValueCodec<T> codec) { _codec = codec; }
   public T Read(string json) => _codec.Read(json);
   public string Write(T value) => _codec.Write(value);
+  internal string Write(T value, IFileExports files) => _codec.Write(value, files);
 }

@@ -5,7 +5,7 @@ export const pascal = (name: string): string => name[0]!.toUpperCase() + name.sl
 export const quote = (value: unknown): string => JSON.stringify(value).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 export const identifier = /^[a-zA-Z][a-zA-Z0-9]*$/;
 export const reserved = new Set(["ready", "onStatus", "status", "sessionId", "then", "constructor", "prototype"]);
-export const runtimeTypes = ["IpcContract", "IpcMethod", "IpcCodec", "IpcSchema", "IpcUnit", "IpcOptional", "IpcStringEnumConverter", "IpcApp", "IpcAppInvoker", "ModContract", "Task", "CancellationToken", "JsonProperty", "JsonPropertyAttribute", "JsonConverter", "EnumMember"];
+export const runtimeTypes = ["IpcContract", "IpcMethod", "IpcCodec", "IpcSchema", "IpcUnit", "IpcOptional", "IpcStringEnumConverter", "IpcApp", "IpcAppInvoker", "IpcFile", "ReceivedFile", "ModContract", "Task", "CancellationToken", "JsonProperty", "JsonPropertyAttribute", "JsonConverter", "EnumMember"];
 export const csKeywords = new Set("abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while".split(" "));
 export const requestType = (name: string, method: Method, role: Role, mod: Methods): string => {
   if (!Object.keys(method.input.object).length) return "IpcUnit";

@@ -2,6 +2,7 @@ import type { Schema } from "../../models/contract.js";
 import { pascal, quote, csKeywords } from "../../models/names.js";
 
 export function csType(schema: Schema): string {
+  if (schema === "file") return "IpcFile";
   if (schema === "int32") return "int";
   if (schema === "boolean") return "bool";
   if (schema === "string") return "string";

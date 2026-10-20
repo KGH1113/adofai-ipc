@@ -38,7 +38,7 @@ TypeSpec 계약에서 C#·TypeScript API를 생성합니다. 모드는 `Register
 - 외부 앱의 명령 요청과 모드의 결과·상태 변경 알림
 - 모드에서 외부 앱으로 보내는 명령과 같은 프로세스 안의 클라이언트
 - 연결 종료·기능 해제에 따른 명령 취소
-- 큰 파일을 위한 임시 다운로드 URL과 스트리밍 전송
+- `ipc.File` 반환·앱 알림을 통한 파일 스트리밍 전송
 - loopback 전용 연결, 메시지·작업 큐 제한, 연결 생존 확인
 
 계약 정의와 API는 [Starlight 문서](docs/README.md)에 있습니다. 모드·앱·계약은 같은 모노레포에서 관리하는 것을 권장합니다.
@@ -64,8 +64,10 @@ TypeSpec 생성기는 계약 해석, 공통 계약 모델, 언어별 emitter와 
 ## Generate APIs
 
 TypeSpec 계약에서 양쪽 API를 생성합니다. 문자열·불리언·`int32`·`float64`·`safeint`, 배열, nullable,
-optional, 문자열 enum/literal과 `void` 반환을 지원합니다. C#의 optional 필드는 `IpcOptional<T>`로
+optional, 문자열 enum/literal, `void` 반환과 모드→앱 방향의 `ipc.File`을 지원합니다. C#의 optional 필드는 `IpcOptional<T>`로
 생략과 명시적인 `null`을 구분하고, 문자열 enum은 TS 값 상수도 생성합니다.
+파일은 C# `IpcFile.FromPath()`·`FromStream()`·`FromWriter()`로 보내고, TS `ReceivedFile`에서
+`stream()`·`text()`·`arrayBuffer()`·`blob()`으로 한 번 읽습니다. SDK가 전송과 세션 종료 시 정리를 처리합니다.
 
 ```typespec
 import "@adofai-ipc/typespec";

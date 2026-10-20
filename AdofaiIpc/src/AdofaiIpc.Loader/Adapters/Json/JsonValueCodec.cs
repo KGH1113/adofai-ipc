@@ -15,9 +15,10 @@ internal sealed class JsonValueCodec<T> : AdofaiIpc.Ports.IValueCodec<T>
   private static readonly DefaultContractResolver Resolver = new IpcContractResolver();
   private readonly IpcSchema _schema;
   internal JsonValueCodec(IpcSchema schema) { _schema = schema ?? throw new ArgumentNullException(nameof(schema)); }
-  private static JsonSerializer Serializer() => JsonSerializer.Create(new JsonSerializerSettings {
+  private static JsonSerializer Serializer(FileSourceConverter files = null) => JsonSerializer.Create(new JsonSerializerSettings {
     ContractResolver = Resolver, MissingMemberHandling = MissingMemberHandling.Error,
-    TypeNameHandling = TypeNameHandling.None, DateParseHandling = DateParseHandling.None, MaxDepth = 32
+    TypeNameHandling = TypeNameHandling.None, DateParseHandling = DateParseHandling.None, MaxDepth = 32,
+    Converters = { files ?? new FileSourceConverter(null) }
   });
   public T Read(string json)
   {
@@ -28,13 +29,15 @@ internal sealed class JsonValueCodec<T> : AdofaiIpc.Ports.IValueCodec<T>
     }
     catch (JsonException error) { throw new IpcValidationException(error.Message); }
   }
-  public string Write(T value)
+  public string Write(T value, AdofaiIpc.Ports.IFileExports files = null)
   {
+    using var converter = new FileSourceConverter(files);
     try
     {
       JToken token = typeof(T) == typeof(IpcUnit) ? (_schema.IsNull ? JValue.CreateNull() : new JObject()) :
-        value == null ? JValue.CreateNull() : JToken.FromObject(value, Serializer());
-      IpcSchemaValidator.Validate(_schema, token, JsonValueReader.Instance); return token.ToString(Formatting.None);
+        value == null ? JValue.CreateNull() : JToken.FromObject(value, Serializer(converter));
+      IpcSchemaValidator.Validate(_schema, token, JsonValueReader.Instance);
+      converter.Complete(token); return token.ToString(Formatting.None);
     }
     catch (JsonException error) { throw new IpcValidationException(error.Message); }
   }

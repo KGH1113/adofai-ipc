@@ -6,4 +6,4 @@ export async function until(predicate, milliseconds = 5000) {
   assert.ok(predicate(), "condition did not settle");
 }
 export const value = result => JSON.parse(JSON.stringify(result));
-export const handlers = { confirm: ({ message }) => message === "Continue?", revision: () => 7, updated: () => {} };
+export const handlers = { confirm: ({ message }) => message === "Continue?", revision: () => 7, updated: () => {}, receiveFile: ({ file }) => file.size };

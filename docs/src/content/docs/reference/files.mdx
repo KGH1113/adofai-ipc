@@ -1,0 +1,97 @@
+---
+title: 파일 전송
+description: 계약에 파일을 선언하고 모드에서 앱으로 전송합니다.
+---
+
+`ipc.File`은 모드에서 앱으로 보내는 파일입니다. SDK가 실제 전송을 처리하며, 앱에서 읽기 전에는 본문을 전송하지 않습니다.
+
+## 계약 정의
+
+모드의 반환값이나 앱 메서드의 인자에 선언합니다.
+
+```typespec title="main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("exports")
+namespace Exports {
+  op exportSettings(): ipc.File;
+
+  @ipc.app interface Browser {
+    receive(file: ipc.File): void;
+  }
+}
+```
+
+생성 후 C#은 `IpcFile`, TS는 `ReceivedFile`을 사용합니다. 모델의 필드·배열·nullable·optional에도 넣을 수 있습니다. 모드 인자나 앱 반환값을 통한 업로드는 허용하지 않습니다.
+
+## 파일 반환
+
+아래는 등록한 `mod`에서 파일을 반환하는 handler입니다.
+
+```csharp
+mod.Handle(ExportsMethods.ExportSettings, (request, context) =>
+    Task.FromResult(IpcFile.FromPath(settingsPath, "application/json")));
+```
+
+| 생성 API | 인자·동작 |
+| --- | --- |
+| `FromPath(path, contentType)` | 읽을 파일 경로. 파일명과 크기를 자동으로 구합니다. |
+| `FromStream(stream, byteLength, fileName, contentType)` | 현재 위치부터 읽을 스트림과 정확한 바이트 수. SDK에 소유권을 넘깁니다. |
+| `FromWriter(writer, byteLength, fileName, contentType)` | 본문을 요청받았을 때 실행할 `Action<Stream>`. 지정한 길이만큼 씁니다. |
+
+`contentType`의 기본값은 `application/octet-stream`입니다. 파일명은 제어 문자 없는 1–255자, 크기는 0부터 `safeint` 최댓값까지입니다. 보낸 `IpcFile`은 재사용하지 않으며, 반환 직후 `using`으로 닫지 않습니다. 보내지 않은 객체는 직접 `Dispose()`합니다.
+
+## 앱에서 읽기
+
+파일명·MIME 타입·크기는 읽기 전에도 사용할 수 있습니다.
+
+```ts
+const file = await channel.exportSettings();
+console.log(file.name, file.type, file.size);
+
+const settings = JSON.parse(await file.text());
+```
+
+| `ReceivedFile` API | 반환값 |
+| --- | --- |
+| `stream({ signal? })` | `ReadableStream<Uint8Array>`. 큰 파일은 스트림으로 처리합니다. |
+| `text({ signal? })` | 전체 내용을 UTF-8로 읽는 `Promise<string>` |
+| `arrayBuffer({ signal? })` | 전체 바이트의 `Promise<ArrayBuffer>` |
+| `blob({ signal? })` | MIME 타입을 유지하는 `Promise<Blob>` |
+| `used` | 읽기 API를 호출했는지 나타내는 `boolean` |
+
+파일 하나는 한 번만 읽습니다. 다시 읽으려면 모드 메서드를 다시 호출합니다. `signal`은 파일 읽기를 취소하며, `text()`·`arrayBuffer()`·`blob()`은 전체 내용을 메모리에 올립니다.
+
+## 선택한 앱에 보내기
+
+등록된 앱 proxy로도 같은 파일 타입을 보냅니다.
+
+```csharp
+if (mod.TryGetApp(appId, out var target))
+    await target.ReceiveAsync(
+        new ReceiveRequest { File = IpcFile.FromPath(exportPath) },
+        cancellationToken);
+```
+
+```ts
+app.use(ExportsContract, {
+  receive: async ({ file }) => {
+    await saveFile(file.name, await file.blob());
+  },
+});
+```
+
+`saveFile`은 앱에서 구현하는 저장 함수입니다. 다운로드 저장·이미지 미리보기·오디오 재생 여부는 앱이 결정합니다. 앱 handler가 반환할 때까지 `ReceiveAsync()`가 기다리므로, 전송 완료를 기다리려면 예제처럼 본문 읽기도 `await`합니다.
+
+## 수명과 오류
+
+받은 파일은 60초 안에 읽기 시작해야 합니다. 연결 종료·모드 해제·전송에 연결한 취소 토큰의 취소 시 사용할 수 없으며, 재연결 후에는 새 파일을 요청합니다. 전송 실패 시 SDK가 자동으로 다시 읽지 않습니다.
+
+| 오류 코드 | 조건 |
+| --- | --- |
+| `file_expired` | 파일이 만료되었거나 이미 읽혀 사용할 수 없음 |
+| `invalid_file` | 선언한 크기와 수신한 크기가 다름 |
+| `file_transfer_failed` | 본문 전송 중 오류 |
+| `file_transfer_unavailable` | 파일 전송을 지원하지 않는 런타임 |
+
+아직 읽지 않은 파일은 런타임 전체에서 최대 128개까지 유지합니다. 사용한 스트림과 만료된 파일은 SDK가 정리합니다. 파일 읽기는 게임 스레드에서 실행하지 않습니다.

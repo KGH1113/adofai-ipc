@@ -215,6 +215,9 @@ public sealed partial class IpcRegistry : IDownloadTickets
 
   internal void CreateDownload(AdofaiIpcNamespace handle, IpcCommand command, object result, string eventName = "download.ready", object metadata = null)
     => _downloads.Reply(handle, command, result, eventName, metadata);
+  internal AdofaiIpc.Contracts.IpcFileTicket ExportFile(AdofaiIpcNamespace handle, IpcDownloadSource source,
+    CancellationToken sessionCancellation, CancellationToken callCancellation)
+    => _downloads.Export(handle, source, sessionCancellation, callCancellation);
   internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string code, out string reason)
     => _downloads.TryTake(token, origin, out source, out code, out reason);
   internal bool TryTakeDownloadTicket(string token, string origin, out IpcDownloadSource source, out string approvedBrowserOrigin, out string code, out string reason)

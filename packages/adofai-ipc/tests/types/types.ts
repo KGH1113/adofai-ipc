@@ -1,4 +1,4 @@
-import { ipc } from "../../dist/index.js";
+import { ipc, type ReceivedFile } from "../../dist/index.js";
 import { Phase, TypedTestContract, type RichEntry } from "../../../typespec/tests/fixtures/typed/generated/index.js";
 
 const app = ipc.registerApp({ displayName: "Typed UI" });
@@ -6,6 +6,7 @@ const channel = app.use(TypedTestContract, {
   confirm: ({ message }) => message.length > 0,
   revision: () => 1,
   updated: () => {},
+  receiveFile: ({ file }) => { const received: ReceivedFile = file; return received.size; },
 });
 const sum: Promise<number> = channel.add({ left: 1, right: 2 });
 const text: Promise<string> = channel.appId();
@@ -13,6 +14,8 @@ void sum; void text;
 const rich: RichEntry = { labels: [], maybeLabel: null, ratio: 1.5, count: 9007199254740991, phase: Phase.Done, literal: "fixed" };
 const roundTrip: Promise<RichEntry> = channel.echoRich({ entry: rich });
 const noResult: Promise<void> = channel.noOp();
+const file: Promise<ReceivedFile> = channel.downloadText();
+void file;
 const session: string | undefined = channel.sessionId;
 const off = channel.onStatus((status, error) => { const code: string | undefined = error?.code; void status; void code; });
 void roundTrip; void noResult; void session; off();
@@ -32,5 +35,5 @@ channel.add({ left: 1, right: 2, typo: true });
 // @ts-expect-error missing app method
 app.use(TypedTestContract, { revision: () => 1 });
 // @ts-expect-error wrong app result
-app.use(TypedTestContract, { confirm: () => "yes", revision: () => 1, updated: () => {} });
+app.use(TypedTestContract, { confirm: () => "yes", revision: () => 1, updated: () => {}, receiveFile: () => 0 });
 app.dispose();

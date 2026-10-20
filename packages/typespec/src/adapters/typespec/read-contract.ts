@@ -4,6 +4,7 @@ import type { Program, Namespace, Model, ModelProperty, Type, Enum, Union, Opera
 import type { Contract, Schema, ObjectSchema, EnumSchema, Methods, Role } from "../../models/contract.js";
 import { sorted, pascal, identifier, reserved, runtimeTypes, requestType } from "../../models/names.js";
 import { modKey, appKey } from "./decorators.js";
+import { containsFile } from "../../models/contract.js";
 
 export function describeContract(program: Program): Contract {
   const roots = [...program.stateMap(modKey) as Map<Namespace, string>];
@@ -13,6 +14,13 @@ export function describeContract(program: Program): Contract {
   const models = new Map<string, { type: Model; schema: ObjectSchema }>();
   const enums = new Map<string, { type: Enum | Union; members: Record<string, string> }>();
   const visiting = new Set<Type>();
+  const fileType = program.getGlobalNamespaceType().namespaces.get("ipc")?.models.get("File");
+  function derivesFile(model: Model, seen = new Set<Model>()): boolean {
+    if (model === fileType) return true;
+    if (seen.has(model)) return false;
+    seen.add(model);
+    return !!(model.baseModel && derivesFile(model.baseModel, seen)) || model.sourceModels.some(source => derivesFile(source.model, seen));
+  }
   function enumSchema(type: Enum | Union, entries: [string, string | number][]): EnumSchema {
     if (!entries.length || entries.some(([, value]) => typeof value !== "string")) throw new Error(`Enum ${type.name} must contain string values only.`);
     if (new Set(entries.map(([, value]) => value)).size !== entries.length) throw new Error(`Enum ${type.name} contains duplicate string values.`);
@@ -48,6 +56,8 @@ export function describeContract(program: Program): Contract {
     return undefined;
   }
   function shape(type: Type, allowVoid = false): Schema {
+    if (type === fileType) return "file";
+    if (type.kind === "Model" && fileType && derivesFile(type)) throw new Error("Use ipc.File directly or as a field; extending or copying it is not supported.");
     if (isVoidType(type)) {
       if (allowVoid) return "void";
       throw new Error("void is supported only as an operation return type.");
@@ -122,6 +132,10 @@ export function describeContract(program: Program): Contract {
   for (const enumeration of sorted(root.enums)) shape(enumeration);
   for (const union of sorted(root.unions)) shape(union);
   const data = { id, models: Object.fromEntries([...models].sort(([a], [b]) => a.localeCompare(b, "en")).map(([name, model]) => [name, model.schema])), mod, app };
+  for (const method of Object.values(mod)) if (containsFile(method.input, data.models))
+    throw new Error("ipc.File is supported in mod results and app parameters; app-to-mod uploads are not supported.");
+  for (const method of Object.values(app)) if (containsFile(method.output, data.models))
+    throw new Error("ipc.File is supported in mod results and app parameters; app-to-mod uploads are not supported.");
   const publicNames = new Set([...runtimeTypes, `${root.name}Contract`, `${root.name}Methods`, `${root.name}App`, `${root.name}AppMethods`, `${root.name}Schemas`, `${root.name}Mod`, `${root.name}AppHandlers`]);
   for (const name of [...Object.keys(data.models), ...enums.keys()]) {
     if (publicNames.has(name)) throw new Error(`Generated type name collision: ${name}.`);

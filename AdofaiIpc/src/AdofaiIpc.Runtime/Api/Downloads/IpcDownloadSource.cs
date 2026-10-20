@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 
 namespace AdofaiIpc;
 
@@ -10,7 +11,10 @@ public class IpcDownloadSource : IDisposable
 {
   private readonly Stream _content;
   private readonly Action<Stream> _writeTo;
-  private bool _disposed;
+  private int _disposed;
+  private CancellationToken _cancellation;
+  private CancellationTokenSource _lifetime;
+  private CancellationTokenRegistration _cancel;
 
   public Stream Content => _content;
   public Action<Stream> WriteTo => _writeTo;
@@ -52,16 +56,17 @@ public class IpcDownloadSource : IDisposable
 
   internal void WriteContent(Stream destination)
   {
-    if (_disposed) throw new ObjectDisposedException(nameof(IpcDownloadSource));
+    if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IpcDownloadSource));
+    _cancellation.ThrowIfCancellationRequested();
     if (destination == null) throw new ArgumentNullException(nameof(destination));
 
     if (_content != null)
     {
-      CopyExactly(_content, destination, ByteLength);
+      CopyExactly(_content, destination, ByteLength, _cancellation);
       return;
     }
 
-    var limited = new LimitedWriteStream(destination, ByteLength);
+    var limited = new LimitedWriteStream(destination, ByteLength, _cancellation);
     _writeTo(limited);
     if (limited.Written != ByteLength)
     {
@@ -72,18 +77,27 @@ public class IpcDownloadSource : IDisposable
 
   public void Dispose()
   {
-    if (_disposed) return;
-    _disposed = true;
-    _content?.Dispose();
+    if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+    try { _lifetime?.Cancel(); _content?.Dispose(); }
+    finally { _cancel.Dispose(); _lifetime?.Dispose(); }
   }
 
-  private static void CopyExactly(Stream source, Stream destination, long byteLength)
+  internal void AttachLifetime(CancellationTokenSource lifetime, Action revoke)
+  {
+    _lifetime = lifetime; _cancellation = lifetime.Token;
+    var cancellation = _cancellation.Register(() => { try { revoke(); } finally { Dispose(); } });
+    _cancel = cancellation;
+    if (Volatile.Read(ref _disposed) != 0) cancellation.Dispose();
+  }
+
+  private static void CopyExactly(Stream source, Stream destination, long byteLength, CancellationToken cancellation)
   {
     byte[] buffer = new byte[64 * 1024];
     long remaining = byteLength;
 
     while (remaining > 0)
     {
+      cancellation.ThrowIfCancellationRequested();
       int requested = (int)Math.Min(buffer.Length, remaining);
       int read = source.Read(buffer, 0, requested);
       if (read <= 0)
@@ -132,13 +146,15 @@ public class IpcDownloadSource : IDisposable
   {
     private readonly Stream _inner;
     private readonly long _limit;
+    private readonly CancellationToken _cancellation;
 
     public long Written { get; private set; }
 
-    public LimitedWriteStream(Stream inner, long limit)
+    public LimitedWriteStream(Stream inner, long limit, CancellationToken cancellation)
     {
       _inner = inner;
       _limit = limit;
+      _cancellation = cancellation;
     }
 
     public override bool CanRead => false;
@@ -170,6 +186,7 @@ public class IpcDownloadSource : IDisposable
 
     public override void Write(byte[] buffer, int offset, int count)
     {
+      _cancellation.ThrowIfCancellationRequested();
       if (count < 0 || Written > _limit - count)
       {
         throw new InvalidDataException("The download writer exceeded the declared byte length.");
@@ -181,6 +198,7 @@ public class IpcDownloadSource : IDisposable
 
     public override void WriteByte(byte value)
     {
+      _cancellation.ThrowIfCancellationRequested();
       if (Written >= _limit)
       {
         throw new InvalidDataException("The download writer exceeded the declared byte length.");

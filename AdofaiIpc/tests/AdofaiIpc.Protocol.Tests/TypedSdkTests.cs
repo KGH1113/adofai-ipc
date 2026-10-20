@@ -9,13 +9,18 @@ using TypedTest.Generated;
 
 internal static partial class Program
 {
-  static ModRegistration<TypedTestApp> CreateTypedFeature(IIpcRuntime runtime, Action<CancellationToken> observeDelay = null)
+  static ModRegistration<TypedTestApp> CreateTypedFeature(IIpcRuntime runtime, Action<CancellationToken> observeDelay = null, Func<FileBundle> createBundle = null)
   {
     int executions = 0;
     var mod = runtime.RegisterMod(TypedTestContract.Instance, "Typed test", new[] { "http://localhost:5173", "https://allowed.example" });
     mod.Handle(TypedTestMethods.Echo, (request, context) => Task.FromResult(request.Entry));
     mod.Handle(TypedTestMethods.EchoRich, (request, context) => Task.FromResult(request.Entry));
     mod.Handle(TypedTestMethods.NoOp, (request, context) => Task.CompletedTask);
+    mod.Handle(TypedTestMethods.DownloadText, (request, context) => Task.FromResult(TextFile()));
+    mod.Handle(TypedTestMethods.DownloadBundle, (request, context) => Task.FromResult(createBundle != null ? createBundle() : new FileBundle {
+      Content = TextFile(), Files = new[] { IpcFile.FromWriter(output => { }, 0, "empty.bin") }, Optional = new IpcOptional<IpcFile>(null)
+    }));
+    mod.Handle(TypedTestMethods.PushFile, (request, context) => context.App.ReceiveFileAsync(new ReceiveFileRequest { File = TextFile() }, context.CancellationToken));
     mod.Handle(TypedTestMethods.Add, (request, context) => Task.FromResult(checked(request.Left + request.Right)));
     mod.Handle(TypedTestMethods.AppId, (request, context) => Task.FromResult(context.App.AppId));
     mod.Handle(TypedTestMethods.Ask, (request, context) => context.App.ConfirmAsync(new ConfirmRequest { Message = request.Message }));
@@ -57,6 +62,7 @@ internal static partial class Program
   static async Task TestTypedSdk()
   {
     TestTypedRichSchemas();
+    await TestTypedFiles();
     await TestTypedDeferredDetach();
     await TestTypedObserverOrder();
     var registry = new IpcRegistry(action => action());

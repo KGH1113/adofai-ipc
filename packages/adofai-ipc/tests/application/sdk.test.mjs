@@ -10,7 +10,7 @@ async function until(predicate, milliseconds = 5000) {
   assert.ok(predicate(), "condition did not settle");
 }
 const value = result => JSON.parse(JSON.stringify(result));
-const handlers = { confirm: ({ message }) => message === "Continue?", revision: () => 7, updated: () => {} };
+const handlers = { confirm: ({ message }) => message === "Continue?", revision: () => 7, updated: () => {}, receiveFile: ({ file }) => file.size };
 
 class Transport {
   messages = new Set(); closes = new Set(); sent = [];

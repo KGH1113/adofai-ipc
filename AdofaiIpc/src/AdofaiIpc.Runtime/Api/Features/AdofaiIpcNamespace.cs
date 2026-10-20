@@ -50,6 +50,8 @@ public sealed class AdofaiIpcNamespace
     => _registry.SendToPeer(this, peerId, kind, name, payload, correlationId, connectionId);
   internal bool IsConnectionActive(string peerId, string connectionId) => _registry.IsConnectionActive(this, peerId, connectionId);
   internal CancellationToken ConnectionLifetime(string peerId, string connectionId) => _registry.ConnectionLifetime(peerId, connectionId);
+  internal Contracts.IpcFileTicket ExportFile(IpcDownloadSource source, CancellationToken sessionCancellation, CancellationToken callCancellation)
+    => _registry.ExportFile(this, source, sessionCancellation, callCancellation);
   internal void NotifySubscribed(IpcPeerInfo peer) => PeerSubscribed?.Invoke(peer);
   internal void NotifyDisconnected(IpcPeerInfo peer) => PeerDisconnected?.Invoke(peer);
   internal void NotifyEvent(IpcPeerEvent message) => PeerEvent?.Invoke(message);

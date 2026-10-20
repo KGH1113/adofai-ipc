@@ -18,6 +18,7 @@ export default defineConfig({
         { label: '계약 정의', slug: 'learn/contract' },
         { label: '모드 API', slug: 'reference/mod' },
         { label: '앱 API', slug: 'reference/app' },
+        { label: '파일 전송', slug: 'reference/files' },
         { label: '코드 생성과 저장소 구성', slug: 'guides/monorepo' },
         { label: '동작 규칙', slug: 'reference/lifecycle' },
         { label: '예제 프로젝트', items: [

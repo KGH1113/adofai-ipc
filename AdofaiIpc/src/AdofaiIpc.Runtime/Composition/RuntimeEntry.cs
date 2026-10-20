@@ -16,7 +16,7 @@ public static class RuntimeEntry
   private static bool _stopped;
 
   public static RuntimeInfo Describe() => new RuntimeInfo(IpcProtocol.ProductVersion, IpcContract.Major, IpcProtocol.Version,
-    "commands", "game-thread", "snapshots", "local-peer", "downloads");
+    "commands", "game-thread", "snapshots", "local-peer", "downloads", "typed-files");
 
   public static IIpcRuntime Start()
   {

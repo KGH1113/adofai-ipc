@@ -47,6 +47,8 @@ export class MessageConnection implements MessageSession {
     if (!["127.0.0.1", "localhost"].includes(this.host) || !Number.isInteger(this.startPort) || !Number.isInteger(this.endPort) || this.startPort < 1 || this.endPort > 65535 || this.endPort < this.startPort || this.endPort - this.startPort > 32 || ![this.timeoutMs, this.heartbeatIntervalMs, this.heartbeatTimeoutMs].every(value => Number.isFinite(value) && value > 0)) throw new TypeError("Invalid localhost IPC discovery options.");
   }
   get state(): IpcConnectionState { return this._state; }
+  // The runtime advertises numeric loopback URLs, including when discovery used localhost.
+  get downloadOrigin(): string | undefined { return this.transport && this.preferredPort !== undefined ? new URL(`http://127.0.0.1:${this.preferredPort}`).origin : undefined; }
   onState(listener: (state: IpcConnectionState) => void): () => void { this.states.add(listener); listener(this._state); return () => this.states.delete(listener); }
   namespace(name: string, protocolMajor?: number): IpcChannel {
     if (protocolMajor !== undefined && (!Number.isInteger(protocolMajor) || protocolMajor < 1)) throw new TypeError("Invalid feature protocol major.");

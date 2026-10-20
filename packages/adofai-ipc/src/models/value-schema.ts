@@ -1,4 +1,4 @@
-export type ValueSchema = "string" | "boolean" | "int32" | "float64" | "safeint" | "void"
+export type ValueSchema = "string" | "boolean" | "int32" | "float64" | "safeint" | "void" | "file"
   | { readonly model: string }
   | { readonly object: Readonly<Record<string, ValueSchema>> }
   | { readonly array: ValueSchema }

@@ -4,6 +4,7 @@ import type { IpcContract } from "../../models/contract";
 import type { MessageSession } from "../../ports/message-session";
 import { IpcCallError } from "../../api/errors";
 import { ContractBinding } from "../sessions/contract-binding";
+import type { FileReader } from "../../ports/file-reader";
 
 export class RegisteredApp {
   readonly appId: string;
@@ -13,7 +14,8 @@ export class RegisteredApp {
   private readonly lifetime = new AbortController();
   private readonly timeoutMs: number;
   private readonly offState: () => void;
-  constructor(options: AppOptions, private readonly connection: MessageSession, appId: string, private readonly createId: () => string, requestTimeoutMs = 30000) {
+  constructor(options: AppOptions, private readonly connection: MessageSession, appId: string, private readonly createId: () => string, requestTimeoutMs = 30000,
+    private readonly fileReader?: FileReader) {
     if (!options || typeof options.displayName !== "string" || !options.displayName.trim() || options.displayName.length > 200)
       throw new TypeError("A displayName of 1–200 characters is required.");
     this.displayName = options.displayName;
@@ -36,7 +38,7 @@ export class RegisteredApp {
     for (const name of Object.keys(implementations)) {
       if (!Object.hasOwn(contract.app, name)) throw new TypeError(`Unknown app handler: ${name}.`);
     }
-    const binding = new ContractBinding(this, this.connection, contract, implementations, this.lifetime.signal, this.timeoutMs, this.createId);
+    const binding = new ContractBinding(this, this.connection, contract, implementations, this.lifetime.signal, this.timeoutMs, this.createId, this.fileReader);
     this.bindings.set(contract.id, binding);
     void this.connection.start().catch(() => {});
     return binding.api as Channel<M>;

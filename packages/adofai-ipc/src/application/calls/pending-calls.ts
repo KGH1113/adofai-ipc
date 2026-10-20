@@ -15,7 +15,7 @@ export class PendingCalls {
   private readonly pending = new Map<string, Pending>();
   constructor(private readonly check: () => void, private readonly raw: MessageChannel,
     private readonly models: Models, private readonly signal: AbortSignal,
-    private readonly timeoutMs: number, private readonly createId: () => string) {}
+    private readonly timeoutMs: number, private readonly createId: () => string, private readonly file?: (value: unknown) => unknown) {}
   request(name: string, input: unknown, output: ValueSchema): Promise<unknown> {
     this.check();
     if (this.pending.size >= 256) return Promise.reject(new IpcCallError("busy", "Too many pending IPC calls."));
@@ -41,7 +41,7 @@ export class PendingCalls {
         typeof error?.message === "string" ? error.message : "Invalid IPC error response."));
       return;
     }
-    try { pending.resolve(decodeValue(pending.output, value, this.models)); }
+    try { pending.resolve(decodeValue(pending.output, value, this.models, "$", 0, this.file)); }
     catch (error) { pending.reject(error); }
   }
 

@@ -26,7 +26,8 @@ internal sealed class IpcDownloadTicketStore
     string[] allowedOrigins,
     out string token,
     out string errorCode,
-    out string errorMessage)
+    out string errorMessage,
+    bool exactOrigins = false)
   {
     token = null;
     errorCode = null;
@@ -56,6 +57,7 @@ internal sealed class IpcDownloadTicketStore
             NamespaceName = namespaceName,
             Source = source,
             AllowedOrigins = CopyOrigins(allowedOrigins),
+            ExactOrigins = exactOrigins,
             ExpiresAtUtc = DateTime.UtcNow.Add(TicketLifetime)
           });
       }
@@ -110,7 +112,7 @@ internal sealed class IpcDownloadTicketStore
         errorCode = IpcErrorCodes.DownloadNotFound;
         errorMessage = "Download ticket not found or expired.";
       }
-      else if (!IsOriginAllowed(ticket.AllowedOrigins, origin))
+      else if (!IsOriginAllowed(ticket.AllowedOrigins, origin, ticket.ExactOrigins))
       {
         errorCode = IpcErrorCodes.OriginNotAllowed;
         errorMessage = "Origin is not allowed for this download ticket.";
@@ -252,20 +254,20 @@ internal sealed class IpcDownloadTicketStore
     return copy;
   }
 
-  private static bool IsOriginAllowed(string[] allowedOrigins, string origin)
+  private static bool IsOriginAllowed(string[] allowedOrigins, string origin, bool exactOrigins)
   {
     if (string.IsNullOrEmpty(origin)) return true;
     if (allowedOrigins == null || allowedOrigins.Length == 0) return true;
 
     for (int i = 0; i < allowedOrigins.Length; i++)
     {
-      if (OriginMatches(allowedOrigins[i], origin)) return true;
+      if (OriginMatches(allowedOrigins[i], origin, exactOrigins)) return true;
     }
 
     return false;
   }
 
-  private static bool OriginMatches(string allowed, string origin)
+  private static bool OriginMatches(string allowed, string origin, bool exactOrigins)
   {
     if (string.IsNullOrEmpty(allowed)) return false;
     if (string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase)) return true;
@@ -277,7 +279,7 @@ internal sealed class IpcDownloadTicketStore
       return
         string.Equals(allowedUri.Scheme, originUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(allowedUri.Host, originUri.Host, StringComparison.OrdinalIgnoreCase) &&
-        allowedUri.IsDefaultPort;
+        (exactOrigins ? allowedUri.Port == originUri.Port : allowedUri.IsDefaultPort);
     }
 
     return false;
@@ -304,6 +306,7 @@ internal sealed class IpcDownloadTicketStore
     public string NamespaceName;
     public IpcDownloadSource Source;
     public string[] AllowedOrigins;
+    public bool ExactOrigins;
     public DateTime ExpiresAtUtc;
   }
 }

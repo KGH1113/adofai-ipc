@@ -4,5 +4,5 @@
   "ContractMajor": 1,
   "ContractAssemblyVersion": "1.0.0.0",
   "WireMajor": 3,
-  "Capabilities": ["commands", "game-thread", "snapshots", "local-peer", "downloads"]
+  "Capabilities": ["commands", "game-thread", "snapshots", "local-peer", "downloads", "typed-files"]
 }
