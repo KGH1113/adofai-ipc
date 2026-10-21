@@ -1,0 +1,163 @@
+name: Validate and release
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Test and prepare packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pnpm install --frozen-lockfile
+      - name: Validate scripts, version, and architecture
+        run: ./scripts/run.sh check
+      - name: Test release policy and docs links
+        run: |
+          node --test scripts/tasks/release/release.test.mjs
+          shellcheck deploy/docs/deploy-home.sh
+          python3 -c 'import ast; ast.parse(open("deploy/docs/bootstrap-routing.py").read())'
+      - name: Test SDK and generator
+        run: |
+          pnpm --filter adofai-ipc build
+          pnpm --filter adofai-ipc check
+          pnpm --filter adofai-ipc test
+          pnpm --filter @adofai-ipc/typespec build
+          pnpm --filter @adofai-ipc/typespec check
+          pnpm --filter @adofai-ipc/typespec test
+      - name: Check and build documentation
+        run: |
+          pnpm docs:check
+          pnpm docs:build
+      - name: Pack the tested packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-packages"
+          pnpm --filter adofai-ipc pack --pack-destination "$RUNNER_TEMP/npm-packages"
+          pnpm --filter @adofai-ipc/typespec pack --pack-destination "$RUNNER_TEMP/npm-packages"
+      - name: Check published versions before release
+        run: node scripts/tasks/release/npm-release.mjs plan "$RUNNER_TEMP/npm-packages"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  docs_image:
+    name: Build documentation image
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and smoke test the image
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          docker build --platform linux/amd64 --pull -f deploy/docs/Dockerfile \
+            --build-arg "BUILD_SHA=$BUILD_SHA" -t "adofai-ipc-docs:$BUILD_SHA" .
+          docker run -d --name docs-smoke -p 127.0.0.1:4180:8080 "adofai-ipc-docs:$BUILD_SHA"
+          trap 'docker logs docs-smoke; docker rm -f docs-smoke' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4180/docs/deployment.json > "$RUNNER_TEMP/metadata.json"; then break; fi
+            echo "Waiting for documentation container ($attempt/30)."
+            sleep 1
+          done
+          python3 -c 'import json,os; assert json.load(open(os.environ["RUNNER_TEMP"]+"/metadata.json"))["gitSHA"]==os.environ["BUILD_SHA"]'
+          curl --fail --silent http://127.0.0.1:4180/docs/ > /dev/null
+          curl --fail --silent http://127.0.0.1:4180/docs/reference/app/ > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4180/docs/nonexistent/)" = 404
+          docker save "adofai-ipc-docs:$BUILD_SHA" | gzip --fast > "$RUNNER_TEMP/docs-image.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-image
+          path: ${{ runner.temp }}/docs-image.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  npm:
+    name: Publish npm packages
+    needs: [validate, docs_image]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@11.18.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages
+      - name: Verify current main commit
+        run: node scripts/tasks/release/assert-main.mjs
+      - name: Publish new versions with npm Trusted Publishing
+        run: node scripts/tasks/release/npm-release.mjs publish "$RUNNER_TEMP/npm-packages"
+
+  docs:
+    name: Deploy documentation to home server
+    needs: npm
+    runs-on: ubuntu-latest
+    environment: home-docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify current main commit
+        run: node scripts/tasks/release/assert-main.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-image
+          path: ${{ runner.temp }}
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:gh-runner
+          ping: kgh
+      - name: Transfer image and deploy the tested commit
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$BUILD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          if ! tailscale ssh kgh@kgh docker image inspect "adofai-ipc-docs:$BUILD_SHA" > /dev/null 2>&1; then
+            tailscale ssh kgh@kgh docker load < "$RUNNER_TEMP/docs-image.tar.gz"
+          fi
+          remote_bundle="/home/kgh/adofai-ipc-docs/incoming/$BUILD_SHA"
+          tailscale ssh kgh@kgh mkdir -p "$remote_bundle"
+          tar -czf - -C deploy/docs compose.yml adofai-ipc-docs.service deploy-home.sh |
+            tailscale ssh kgh@kgh tar -xzf - -C "$remote_bundle"
+          tailscale ssh kgh@kgh bash "$remote_bundle/deploy-home.sh" "$BUILD_SHA"
+      - name: Independently verify public documentation
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --max-time 30 \
+            https://adofai-ipc.impl1113.dev/docs/deployment.json > "$RUNNER_TEMP/public-metadata.json"
+          python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/public-metadata.json")); assert d["gitSHA"]==os.environ["BUILD_SHA"] and d["environment"]=="main"'
+          curl --fail --silent --show-error --max-time 30 https://adofai-ipc.impl1113.dev/docs/ > /dev/null

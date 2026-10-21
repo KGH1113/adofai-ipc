@@ -3,6 +3,17 @@
   "version": "2.1.0",
   "type": "module",
   "license": "MIT",
+  "description": "TypeSpec contracts and TypeScript/C# code generation for ADOFAI IPC.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KGH1113/adofai-ipc.git",
+    "directory": "packages/typespec"
+  },
+  "homepage": "https://adofai-ipc.impl1113.dev/docs/",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "tspMain": "./lib/main.tsp",
   "exports": {

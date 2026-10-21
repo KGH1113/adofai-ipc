@@ -81,7 +81,7 @@ namespace SettingsExample {
 
 이 계약에서 TypeScript 패키지를 `packages/ipc/`, C# 소스를 `apps/mod/Generated/`로 생성합니다. 생성되는 `SettingsExampleContract`는 양쪽 등록에, `Settings`는 조회 결과에 사용합니다.
 
-[코드 생성과 모노레포](/guides/monorepo/#생성과-참조)의 설정에서 C# namespace를 `SettingsExample.Generated`로 지정하고 `pnpm exec adofai-ipc generate`를 실행합니다. 앱에는 `adofai-ipc`와 `"@example/ipc": "workspace:*"`를 의존성으로 추가합니다. C# 생성 소스는 모드와 함께 컴파일합니다.
+[코드 생성과 모노레포](/docs/guides/monorepo/#생성과-참조)의 설정에서 C# namespace를 `SettingsExample.Generated`로 지정하고 `pnpm exec adofai-ipc generate`를 실행합니다. 앱에는 `adofai-ipc`와 `"@example/ipc": "workspace:*"`를 의존성으로 추가합니다. C# 생성 소스는 모드와 함께 컴파일합니다.
 
 ## 확인
 
@@ -93,4 +93,4 @@ pnpm dev --host localhost --port 5173 --strictPort
 
 `http://localhost:5173`에 **빈 입력란, 해제된 체크박스, `모드 연결 전`**이 표시되면 준비가 끝났습니다. 포트는 다음 단계의 `allowedOrigins`와 일치해야 합니다.
 
-[다음: 모드를 등록하고 초기 설정을 제공합니다 →](/examples/settings/mod/)
+[다음: 모드를 등록하고 초기 설정을 제공합니다 →](/docs/examples/settings/mod/)

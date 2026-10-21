@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.astro
+**/bin
+**/obj
+.git
+.env
+.env.*
+build
+deploy/**/*.tgz

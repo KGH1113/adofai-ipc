@@ -27,7 +27,7 @@ TypeSpec 계약에서 C#·TypeScript API를 생성합니다. 모드는 `Register
 메서드를 구현하고, 앱은 `registerApp()`과 `use()`로 얻은 채널에서 호출합니다.
 모드는 등록된 앱을 선택해 먼저 호출하거나 요청한 앱에 응답할 수 있습니다. SDK가 연결·재접속·직렬화와 입력·결과 검증을 처리합니다.
 
-제품 버전은 **2.0.0**입니다. v1은 별도로 릴리즈하지 않으며 v0에서 바로 v2로 전환합니다.
+제품 버전은 **2.1.0**입니다. v1은 별도로 릴리즈하지 않으며 v0에서 바로 v2로 전환합니다.
 
 ## Architecture
 
@@ -145,6 +145,10 @@ Helper/Replay 1.0.0이 SDK로 전환된 뒤 실행 중 기존 IPC 폴더를 정�
 [Starlight 개발 문서](docs/README.md)는 TypeSpec 계약, C#·TypeScript API, 코드 생성과
 저장소 구성을 다룹니다. Node.js 22.22 이상과 저장소에 지정된 pnpm으로 `pnpm install` 후
 `pnpm docs:dev`를 실행합니다. `.env`의 게임·.NET 경로는 기존 빌드 설정을 따릅니다.
+
+공개 문서는 https://adofai-ipc.impl1113.dev/docs/에서 제공합니다. `dev`와 PR에서는 SDK·생성기·문서를
+검증하고, `main` 반영 시 npm 두 패키지와 홈서버 문서를 자동 배포합니다.
+최초 인증 연결, 버전 변경과 재배포 방법은 [배포 안내](deploy/README.md)를 참고하십시오.
 
 ## Runtime and validation
 

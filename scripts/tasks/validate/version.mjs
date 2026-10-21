@@ -24,6 +24,7 @@ assert.equal(Number(read("AdofaiIpc/src/AdofaiIpc.Runtime/Models/Protocol/IpcPro
 assert.equal(Number(read("packages/adofai-ipc/src/models/protocol.ts").match(/PROTOCOL_VERSION = (\d+)/)[1]), manifest.WireMajor);
 for (const file of ["AdofaiIpc/src/AdofaiIpc.Contracts/AdofaiIpc.Contracts.csproj", "AdofaiIpc/src/AdofaiIpc.Loader/AdofaiIpc.Loader.csproj"])
   assert.equal(read(file).match(/<AssemblyVersion>(.*?)<\/AssemblyVersion>/)[1], "1.0.0.0");
-for (const tag of [process.env.GITHUB_REF_NAME, process.env.RELEASE_TAG].filter(Boolean))
+const githubTag = process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : undefined;
+for (const tag of [githubTag, process.env.RELEASE_TAG].filter(Boolean))
   assert.equal(tag.replace(/^v/, ""), version);
 console.log(`Validated runtime ${version}, contract ABI 1.0.0.0, wire 3.`);

@@ -12,7 +12,7 @@ while IFS= read -r script; do
 done < <(find "$ADOFAIIPC_PROJECT_ROOT/scripts" -type f -name '*.sh' | sort)
 
 if command -v shellcheck >/dev/null 2>&1; then
-  while IFS= read -r script; do shellcheck -x "$script"; done \
+  while IFS= read -r script; do shellcheck -x -P "SCRIPTDIR:$ADOFAIIPC_PROJECT_ROOT/scripts" "$script"; done \
     < <(find "$ADOFAIIPC_PROJECT_ROOT/scripts" -type f -name '*.sh' | sort)
 else
   printf 'shellcheck is not installed; syntax validation only.\n'

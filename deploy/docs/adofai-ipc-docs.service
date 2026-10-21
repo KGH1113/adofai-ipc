@@ -1,0 +1,15 @@
+[Unit]
+Description=ADOFAI IPC documentation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/kgh/adofai-ipc-docs/current
+ExecStart=/usr/bin/docker compose --project-name adofai-ipc-docs --env-file compose.env -f compose.yml up -d --no-build --wait --remove-orphans
+ExecStop=/usr/bin/docker compose --project-name adofai-ipc-docs --env-file compose.env -f compose.yml down
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target

@@ -71,7 +71,7 @@ TypeScript에서는 `displayName: string`, `revision: number`가 되고, C#에�
 | `void` 반환값 | `Promise<void>` | `Task` handler |
 | `ipc.File` | `ReceivedFile` | `IpcFile` |
 
-`ipc.File`은 모드의 반환값과 앱 메서드의 인자에 사용합니다. 배열·nullable·optional 필드에도 넣을 수 있습니다. 전송 방법은 [파일 전송](/reference/files/)을 참고하세요.
+`ipc.File`은 모드의 반환값과 앱 메서드의 인자에 사용합니다. 배열·nullable·optional 필드에도 넣을 수 있습니다. 전송 방법은 [파일 전송](/docs/reference/files/)을 참고하세요.
 
 ## 생략과 null
 
@@ -116,4 +116,4 @@ await channel.setPhase({ phase: Phase.Done });
 
 `Phase.Done`은 실제 값 `"done"`인 상수입니다. 같은 이름의 `Phase` 타입은 허용된 문자열만 받습니다. C#에서는 `Phase.Done` enum 값으로 전달하며 직렬화 값도 `"done"`입니다. `void`도 상대 handler가 완료되거나 실패할 때까지 기다립니다.
 
-계약을 변경하면 양쪽 코드를 다시 생성해야 합니다. 출력 연결은 [코드 생성과 저장소 구성](/guides/monorepo/), 값의 제약은 [동작 규칙](/reference/lifecycle/)을 참고하세요.
+계약을 변경하면 양쪽 코드를 다시 생성해야 합니다. 출력 연결은 [코드 생성과 저장소 구성](/docs/guides/monorepo/), 값의 제약은 [동작 규칙](/docs/reference/lifecycle/)을 참고하세요.

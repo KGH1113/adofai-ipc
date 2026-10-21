@@ -1,0 +1,14 @@
+services:
+  docs:
+    image: adofai-ipc-docs:${BUILD_SHA:?BUILD_SHA is required}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4180:8080"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
