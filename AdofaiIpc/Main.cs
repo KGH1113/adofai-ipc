@@ -34,6 +34,7 @@ public sealed class Main
       MainThreadDispatcher.Initialize();
       RegisterBuiltInNamespace();
       Instance.Enable();
+      Retirement.RetirementCoordinator.Schedule(modEntry);
       return true;
     }
     catch (Exception e)
@@ -50,6 +51,7 @@ public sealed class Main
     try
     {
       Instance?.Disable();
+      Retirement.RetirementCoordinator.Cancel();
       AdofaiIpc.UnregisterNamespace("adofai-ipc");
       MainThreadDispatcher.Shutdown();
       modEntry.OnToggle = null;

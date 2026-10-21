@@ -19,6 +19,20 @@
 
 ## Overview
 
+**0.4.2 is the final standalone transition release.** Helper and Replay 1.0.0
+bundle the IPC SDK. Once their installed entry points and SDK files have been
+migrated, this release removes `Mods/AdofaiIpc` during the running game without
+a modal or restart request. Its already loaded compatibility runtime remains
+available for the rest of that session. Failed/offline consumer updates keep
+the legacy installation for another attempt rather than trigger reinstall loops.
+
+Removal runs on a worker after startup returns to Unity, so the original
+Launcher/Shim can finish saving their update state. The folder is detached to
+`.adofai-ipc-retired` outside `Mods` and immediately deleted. OS-locked remnants
+can remain there until a later consumer startup retries cleanup; Windows file
+locking still requires manual game verification. A failed detach preserves the
+original installation and is recorded in the log. No live DLL is overwritten.
+
 ADOFAI-IPC는 A Dance of Fire and Ice 모드들이 함께 사용할 수 있는
 로컬 HTTP IPC 게이트웨이입니다.
 
@@ -53,8 +67,8 @@ Mods/
     ├── AdofaiIpc.Shim.dll
     ├── AdofaiIpc.dll                 # 0.2.0 installer compatibility copy
     ├── Update/state.json
-    ├── Launcher/versions/0.4.1/AdofaiIpc.Launcher.dll
-    └── Runtime/versions/0.4.1/AdofaiIpc.dll
+    ├── Launcher/versions/0.4.2/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.4.2/AdofaiIpc.dll
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를

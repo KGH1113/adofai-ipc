@@ -57,6 +57,7 @@ internal sealed class MainThreadDispatcher : MonoBehaviour
 
   private void Update()
   {
+    Retirement.RetirementCoordinator.Tick();
     for (int i = 0; i < MaxActionsPerFrame && Pending.TryDequeue(out Action action); i++)
     {
       try

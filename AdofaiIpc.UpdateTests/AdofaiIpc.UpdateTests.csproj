@@ -9,6 +9,7 @@
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../AdofaiIpc/Retirement/LegacyRetirement.cs" Link="LegacyRetirement.cs" />
     <Reference Include="AdofaiIpc.Launcher"><HintPath>../build/AdofaiIpc.Launcher/AdofaiIpc.Launcher.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="AdofaiIpc.Shim"><HintPath>../build/AdofaiIpc.Shim/AdofaiIpc.Shim.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="UnityModManager"><HintPath>$(UnityModManagerDll)</HintPath><Private>true</Private></Reference>
