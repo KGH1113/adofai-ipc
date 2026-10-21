@@ -1,0 +1,64 @@
+---
+title: "2. Register the mod"
+description: "Add initial settings and a read handler to the mod."
+---
+
+In this step, make **the mod store initial settings and respond to `getSettings()`**. The web page is not connected yet.
+
+## Prepare the registration lifetime
+
+Dispose of the registration when disabling the mod. Add a field to the mod class to hold a cleanup function. Import the `System` and `System.Threading.Tasks` namespaces.
+
+```csharp title="Field in the mod class"
+private Action stopIpc = () => { };
+```
+
+## Register on activation
+
+Add the following code to the activation callback. `ipc` is the SDK object available in that callback. `current` holds the settings for this activation.
+
+```csharp title="Add to the mod activation callback"
+var gate = new object();
+var current = new Settings { Label = "Example", Enabled = true };
+
+var mod = ipc.RegisterMod(
+    SettingsExampleContract.Instance,
+    displayName: "Settings Example",
+    allowedOrigins: new[] { "http://localhost:5173" });
+
+mod.Handle(SettingsExampleMethods.GetSettings, (request, context) =>
+{
+    lock (gate)
+    {
+        return Task.FromResult(current);
+    }
+});
+
+mod.MarkReady();
+stopIpc = mod.Dispose;
+```
+
+`GetSettings` has no inputs, so there are no fields to read from `request`. The handler's `Task<Settings>` supplies the app's query result.
+
+`gate` is a lock shared with the save handler added later. Reading and writing access the same settings, so both operations use the same lock.
+
+Call `MarkReady()` after installing the handler. `allowedOrigins` contains the web app address from the previous step. Connecting through `127.0.0.1` instead of `localhost` uses a different origin.
+
+## Dispose on deactivation
+
+Call the cleanup function in the deactivation callback.
+
+```csharp title="Add to the mod deactivation callback"
+stopIpc();
+stopIpc = () => { };
+```
+
+The next activation creates a new registration and initial settings. Connect your callbacks so activation code runs only once per activation.
+
+## Verify
+
+Build, install, and activate the mod. The mod is now registered and initialized, but the web page still says `Not connected to mod` because its app code has not been connected.
+
+In the next step, verify that the returned values are `label: "Example"` and `enabled: true`.
+
+[Next: read the mod settings in the browser →](/docs/en/examples/settings/read/)

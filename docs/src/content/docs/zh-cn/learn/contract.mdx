@@ -1,0 +1,119 @@
+---
+title: "契约定义"
+description: "使用 TypeSpec 定义模组与应用的方法和共享类型。"
+---
+
+从同一份契约生成 C# 与 TypeScript API，无需分别编写两端的方法名称、输入类型和返回类型。
+
+## 模组方法
+
+带有 `@ipc.mod` 的命名空间是注册入口。根级别的 `op` 由模组实现、由应用调用。
+
+```typespec title="main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("echo")
+namespace Echo {
+  op echo(text: string): string;
+}
+```
+
+- `"echo"`：模组契约的固定 ID，与显示名称不同。
+- `Echo`：用于生成 `EchoContract` 和 `EchoMethods` 的名称。
+- `echo`：接收字符串并返回字符串的方法。
+
+应用通过 `channel.echo({ text: "hello" })` 调用，模组为 `EchoMethods.Echo` 注册处理器。两端分别使用 `Promise<string>` 和 `Task<string>` 处理结果。无参数的方法可以直接调用，例如 `ping()`。
+
+## 应用方法
+
+同一契约内带有 `@ipc.app` 的接口由应用实现、由模组调用。
+
+```typespec
+import "@adofai-ipc/typespec";
+
+@ipc.mod("dialogs")
+namespace Dialogs {
+  op requestConfirmation(message: string): boolean;
+
+  @ipc.app
+  interface Browser {
+    confirm(message: string): boolean;
+  }
+}
+```
+
+在上述契约中，模组实现 `requestConfirmation`，应用实现 `confirm`。角色由 `@ipc.app` 决定，与接口名称无关。如果不需要应用方法，可以省略该接口。
+
+## 共享类型
+
+使用 `model` 声明结构化数据。
+
+```typespec
+model ModInfo {
+  displayName: string;
+  revision: int32;
+}
+```
+
+在 TypeScript 中生成 `displayName: string` 和 `revision: number`，在 C# 中生成 `string DisplayName` 和 `int Revision`。生成代码负责名称转换和序列化。
+
+| TypeSpec | TypeScript | C# |
+| --- | --- | --- |
+| `string` / `boolean` | `string` / `boolean` | `string` / `bool` |
+| `int32` | `number` | `int` |
+| `float64` | `number` | `double` |
+| `safeint` | `number` | `long` |
+| `T[]` | `Array<T>` | `T[]` |
+| `T \| null` | `T \| null` | `T?` |
+| `field?: T` | `field?: T` | `IpcOptional<T>` |
+| `"fixed"` / `"a" \| "b"` | 字符串字面量／字面量联合 | 带验证的 `string` |
+| 字符串枚举 | 值常量及同名联合类型 | 序列化为字符串的 `enum` |
+| `void` 返回值 | `Promise<void>` | `Task` 处理器 |
+| `ipc.File` | `ReceivedFile` | `IpcFile` |
+
+`ipc.File` 用于模组的返回值和应用方法的参数，也可以放在数组、可空值和可选字段中。传输方法请参阅[文件传输](/docs/zh-cn/reference/files/)。
+
+## 省略与 null
+
+`?` 允许省略字段，`| null` 允许显式传入 `null`，两者是独立的条件。
+
+```typespec
+model Patch {
+  label?: string;
+  note?: string | null;
+}
+```
+
+```ts
+const omitted: Patch = {};
+const cleared: Patch = { note: null };
+const changed: Patch = { label: "hello" };
+```
+
+```csharp
+var omitted = new Patch();
+var cleared = new Patch { Note = new IpcOptional<string?>(null) };
+var changed = new Patch { Label = "hello" };
+
+if (cleared.Note.IsSpecified)
+    ApplyNote(cleared.Note.Value); // 此处为 null
+```
+
+`IpcOptional<T>` 的默认状态为省略；存在值时，`IsSpecified` 为 `true`。不要读取被省略字段的 `Value`。该契约不允许 `label: null`。
+
+## 字符串枚举与无返回值的方法
+
+```typespec
+enum Phase { Pending: "pending", Done: "done" }
+op setPhase(phase: Phase): void;
+```
+
+```ts
+import { Phase } from "@example/ipc";
+
+await channel.setPhase({ phase: Phase.Done });
+```
+
+`Phase.Done` 是实际值为 `"done"` 的常量。同名的 `Phase` 类型仅接受允许的字符串。在 C# 中传入 `Phase.Done` 枚举值，序列化结果同样是 `"done"`。`void` 方法也会等待对端处理器完成或失败。
+
+修改契约后必须重新生成两端代码。输出引用方式请参阅[代码生成与仓库结构](/docs/zh-cn/guides/monorepo/)，值的约束请参阅[运行规则](/docs/zh-cn/reference/lifecycle/)。

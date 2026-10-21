@@ -1,0 +1,81 @@
+---
+title: "3. 在浏览器中读取"
+description: "注册应用并显示模组返回的设置。"
+---
+
+本步骤将**`尚未连接模组` 界面替换为真实读取结果**，依次添加应用注册、等待就绪、读取和界面更新。
+
+## 注册应用与更新界面
+
+按以下 diff 修改 `apps/web/src/main.ts`，保留原有选择 `status` 的代码。
+
+```diff title="apps/web/src/main.ts"
+-export {};
+-
++import { ipc } from "adofai-ipc";
++import { SettingsExampleContract, type Settings } from "@example/ipc";
++
++const label = document.querySelector<HTMLInputElement>("#label")!;
++const enabled = document.querySelector<HTMLInputElement>("#enabled")!;
+ const status = document.querySelector<HTMLOutputElement>("#status")!;
+-status.textContent = "尚未连接模组";
++const app = ipc.registerApp({ displayName: "Settings UI" });
++const channel = app.use(SettingsExampleContract, {});
++let disposed = false;
++
++function show(settings: Settings) {
++  label.value = settings.label;
++  enabled.checked = settings.enabled;
++}
+```
+
+`show()` 将模组返回的 `Settings` 填入输入控件。契约没有应用方法，因此传给 `use()` 的处理器参数为空对象。
+
+## 等待就绪后读取
+
+在同一文件的 `show()` 之后添加以下代码。
+
+```ts title="添加到 apps/web/src/main.ts"
+async function loadSettings() {
+  status.textContent = "正在连接";
+  try {
+    await channel.ready();
+    if (disposed) return;
+    const settings = await channel.getSettings();
+    if (disposed) return;
+    show(settings);
+    status.textContent = "已加载设置";
+  } catch (error) {
+    if (!disposed) status.textContent = `加载设置失败: ${String(error)}`;
+  }
+}
+
+window.addEventListener("pagehide", () => {
+  disposed = true;
+  app.dispose();
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) window.location.reload();
+});
+
+void loadSettings();
+```
+
+`ready()` 等待模组就绪，`getSettings()` 调用上一步的处理器。收到结果后使用 `show()` 更新界面，失败时在状态区域显示错误。
+
+离开页面时释放应用注册。`disposed` 防止延迟到达的结果更新已经关闭的界面。如果浏览器后退恢复了缓存页面，则刷新页面以创建新的注册。
+
+## 验证
+
+保持模组启用并刷新网页。
+
+| 项目 | 预期值 |
+| --- | --- |
+| 显示文本 | `Example` |
+| 启用复选框 | 已勾选 |
+| 状态 | `已加载设置` |
+
+目前只实现读取，因此输入控件仍然禁用。如果一直显示 `正在连接`，请检查模组是否调用 `MarkReady()`。如果读取失败，请检查访问地址与 `allowedOrigins`。
+
+[下一步：为设置界面添加保存功能 →](/docs/zh-cn/examples/settings/write/)

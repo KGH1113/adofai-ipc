@@ -1,0 +1,81 @@
+---
+title: "3. Read settings in the browser"
+description: "Register the app and display the settings returned by the mod."
+---
+
+In this step, **replace `Not connected to mod` with actual settings**. Add app registration, readiness waiting, querying, and display updates in order.
+
+## Register the app and update the page
+
+Apply this diff to `apps/web/src/main.ts`. Keep the existing code that selects `status`.
+
+```diff title="apps/web/src/main.ts"
+-export {};
+-
++import { ipc } from "adofai-ipc";
++import { SettingsExampleContract, type Settings } from "@example/ipc";
++
++const label = document.querySelector<HTMLInputElement>("#label")!;
++const enabled = document.querySelector<HTMLInputElement>("#enabled")!;
+ const status = document.querySelector<HTMLOutputElement>("#status")!;
+-status.textContent = "Not connected to mod";
++const app = ipc.registerApp({ displayName: "Settings UI" });
++const channel = app.use(SettingsExampleContract, {});
++let disposed = false;
++
++function show(settings: Settings) {
++  label.value = settings.label;
++  enabled.checked = settings.enabled;
++}
+```
+
+`show()` copies the `Settings` received from the mod into the inputs. The contract has no app methods, so `use()` receives an empty handlers object.
+
+## Wait for readiness and query
+
+Add the following code below `show()` in the same file.
+
+```ts title="Add to apps/web/src/main.ts"
+async function loadSettings() {
+  status.textContent = "Connecting";
+  try {
+    await channel.ready();
+    if (disposed) return;
+    const settings = await channel.getSettings();
+    if (disposed) return;
+    show(settings);
+    status.textContent = "Settings loaded";
+  } catch (error) {
+    if (!disposed) status.textContent = `Failed to load settings: ${String(error)}`;
+  }
+}
+
+window.addEventListener("pagehide", () => {
+  disposed = true;
+  app.dispose();
+});
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) window.location.reload();
+});
+
+void loadSettings();
+```
+
+`ready()` waits for the mod to be ready, and `getSettings()` calls the handler from the previous step. When the result arrives, `show()` updates the page. Failures appear in the status area.
+
+Dispose of the app registration when leaving the page. `disposed` prevents late results from updating a closed page. If browser history restores a cached page, reload it to create a fresh registration.
+
+## Verify
+
+Refresh the web page while the mod is active.
+
+| Item | Expected value |
+| --- | --- |
+| Display text | `Example` |
+| Enabled checkbox | Checked |
+| Status | `Settings loaded` |
+
+The inputs remain disabled because only reading is implemented. If `Connecting` persists, check that the mod calls `MarkReady()`. If the query fails, check the page's origin and `allowedOrigins`.
+
+[Next: add saving to the settings page →](/docs/en/examples/settings/write/)

@@ -1,0 +1,80 @@
+---
+title: "应用 API"
+description: "注册应用、调用模组并实现应用处理器。"
+---
+
+应用需要引用 `adofai-ipc` 和从契约生成的包。下文的 `@example/ipc` 是生成包的示例名称。
+
+## 注册与调用模组
+
+使用 `registerApp()` 注册应用，使用 `use()` 选择契约。以下契约为 `op echo(text: string): string;`。
+
+```ts
+import { ipc } from "adofai-ipc";
+import { EchoContract } from "@example/ipc";
+
+const app = ipc.registerApp({ displayName: "Echo UI" });
+
+try {
+  const channel = app.use(EchoContract, {});
+  await channel.ready();
+  console.log(await channel.echo({ text: "hello" }));
+} catch (error) {
+  console.error("调用失败", error);
+} finally {
+  app.dispose();
+}
+```
+
+| API 或参数 | 返回值与行为 |
+| --- | --- |
+| `registerApp({ displayName })` | 应用注册对象；名称是显示给用户的字符串 |
+| `use(contract, handlers)` | 提供生成的模组方法的通道 |
+| `ready()` | 等待模组就绪和应用注册完成的 `Promise<void>` |
+| `echo({ text })` | 包含模组处理器结果的 `Promise<string>` |
+| `dispose()` | 释放应用注册和契约使用关系，无返回值 |
+
+应用 ID 自动生成为 UUID。同一个注册重连时保留该 ID，新标签页或新注册会获得不同的 ID。ID 和显示名称本身不授予访问权限。
+
+对于持续运行的应用，应在入口创建注册，在退出时释放。在 React 中，可以在 `useEffect()` 中注册，并在清理函数中调用 `app.dispose()`。不需要为每次调用重新注册。
+
+## 提供应用方法
+
+将应用处理器作为 `use()` 的第二个参数传入。以下示例使用提供 `confirm(message: string): boolean;` 的 `DialogsContract`。
+
+```ts
+import { ipc } from "adofai-ipc";
+import { DialogsContract } from "@example/ipc";
+
+const app = ipc.registerApp({ displayName: "Dialog UI" });
+
+app.use(DialogsContract, {
+  confirm: ({ message }) => window.confirm(message),
+});
+
+// 应用退出时调用 app.dispose()。
+```
+
+`message` 被推断为 `string`。处理器必须返回 `boolean` 或 `Promise<boolean>`。缺少必需的处理器或返回类型不匹配都会产生类型错误。如果契约没有应用方法，请传入 `{}`。
+
+调用错误与重试条件请参阅[运行规则](/docs/zh-cn/reference/lifecycle/)。
+
+## 重连与状态查询
+
+`onStatus()` 会立即报告当前状态，并在之后报告变化。`ready` 表示应用注册已完成，因此可以在初次连接和重连时查询快照。
+
+```ts
+const stop = channel.onStatus((status, error) => {
+  if (status === "ready") {
+    void channel.getSettings().then(showSettings).catch(showError);
+  } else if (error) {
+    showError(error);
+  }
+});
+
+// 界面释放时
+stop();
+app.dispose();
+```
+
+此示例将通道的 `getSettings()` 结果传给 `showSettings()`。状态包括 `unavailable`、`initializing`、`ready` 和 `error`，也可以通过 `channel.status` 读取。`channel.sessionId` 只在注册后存在，并会在重连时变化。请结合应用处理器接收的变更通知与重连后的快照来维护状态。

@@ -1,0 +1,27 @@
+---
+title: "Example project: mod settings panel"
+description: "Write a contract and add reading and saving step by step."
+---
+
+Build a project that reads and changes a mod's display text and enabled state from a browser. Complete the read flow first, then add saving.
+
+Settings live in the mod's memory. They survive browser refreshes but reset when the mod is reactivated.
+
+## Steps
+
+| Step | What to add | Expected result |
+| --- | --- | --- |
+| [1. Project and contract](/docs/en/examples/settings/setup/) | Directories, an empty page, and a read contract | Disabled inputs appear in the browser |
+| [2. Register the mod](/docs/en/examples/settings/mod/) | Initial settings and a read handler | IPC functionality registers when the mod activates |
+| [3. Read in the browser](/docs/en/examples/settings/read/) | App registration and `getSettings()` | The page displays the mod's initial values |
+| [4. Add saving](/docs/en/examples/settings/write/) | Saving in the contract, mod, and app | Saved values remain available after a browser refresh |
+
+Each page follows **goal for this step → file changes → expected result**. Continue from the previous step's code. In diffs, `+` marks lines to add and `-` marks lines to remove.
+
+## Prerequisites
+
+- The C# mod project references the IPC SDK, and its activation callback can access the SDK object `ipc`.
+- TypeScript and C# generation from TypeSpec is configured. Follow [Code generation and repositories](/docs/en/guides/monorepo/) for output references.
+- The web app uses Node.js and pnpm. Connect activation and deactivation callbacks to the lifecycle of your mod framework.
+
+[Start with the project and contract →](/docs/en/examples/settings/setup/)

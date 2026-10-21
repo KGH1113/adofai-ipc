@@ -1,0 +1,80 @@
+---
+title: "App API"
+description: "Register an app, call mods, and implement app handlers."
+---
+
+An app references `adofai-ipc` and the package generated from its contract. `@example/ipc` below is an example name for that generated package.
+
+## Registration and mod calls
+
+Register the app with `registerApp()` and select a contract with `use()`. This example uses `op echo(text: string): string;`.
+
+```ts
+import { ipc } from "adofai-ipc";
+import { EchoContract } from "@example/ipc";
+
+const app = ipc.registerApp({ displayName: "Echo UI" });
+
+try {
+  const channel = app.use(EchoContract, {});
+  await channel.ready();
+  console.log(await channel.echo({ text: "hello" }));
+} catch (error) {
+  console.error("Call failed", error);
+} finally {
+  app.dispose();
+}
+```
+
+| API or argument | Return value or behavior |
+| --- | --- |
+| `registerApp({ displayName })` | App registration. The name is a string shown to users |
+| `use(contract, handlers)` | Channel exposing the generated mod methods |
+| `ready()` | `Promise<void>` that waits for mod readiness and completed app registration |
+| `echo({ text })` | `Promise<string>` containing the mod handler's result |
+| `dispose()` | Release the app registration and contract usage. No return value |
+
+The app ID is generated as a UUID. It stays the same when the same registration reconnects; new tabs and new registrations receive different IDs. An ID or display name does not grant access.
+
+For a long-running app, create the registration at its entry point and dispose of it on shutdown. In React, register inside `useEffect()` and call `app.dispose()` in its cleanup. You do not need a new registration for each call.
+
+## Providing app methods
+
+Pass app handlers as the second argument to `use()`. This example uses `DialogsContract`, which provides `confirm(message: string): boolean;`.
+
+```ts
+import { ipc } from "adofai-ipc";
+import { DialogsContract } from "@example/ipc";
+
+const app = ipc.registerApp({ displayName: "Dialog UI" });
+
+app.use(DialogsContract, {
+  confirm: ({ message }) => window.confirm(message),
+});
+
+// Call app.dispose() when the app shuts down.
+```
+
+`message` is inferred as `string`. The handler must return `boolean` or `Promise<boolean>`. Missing required handlers and incompatible return types are type errors. Pass `{}` for contracts without app methods.
+
+See [Runtime rules](/docs/en/reference/lifecycle/) for call errors and retry conditions.
+
+## Reconnection and state queries
+
+`onStatus()` immediately delivers the current status and then reports changes. `ready` means app registration has completed, so you can query a snapshot on both initial connection and reconnection.
+
+```ts
+const stop = channel.onStatus((status, error) => {
+  if (status === "ready") {
+    void channel.getSettings().then(showSettings).catch(showError);
+  } else if (error) {
+    showError(error);
+  }
+});
+
+// When the view is disposed
+stop();
+app.dispose();
+```
+
+This example passes the result of a channel's `getSettings()` to `showSettings()`. The possible states are `unavailable`, `initializing`, `ready`, and `error`; they are also available through `channel.status`. `channel.sessionId` exists only after registration and changes on reconnection. Combine change notifications received through app handlers with a snapshot after reconnecting.

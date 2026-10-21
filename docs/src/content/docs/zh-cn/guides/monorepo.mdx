@@ -1,0 +1,109 @@
+---
+title: "代码生成与仓库结构"
+description: "在单一仓库或独立仓库中引用生成代码。"
+---
+
+建议在同一个单一仓库（monorepo）中管理模组、浏览器应用和 TypeSpec 契约。这样可以在同一个 PR 中修改并验证契约和两端实现。
+
+## 目录结构
+
+将契约源文件与生成输出分开。
+
+```text
+apps/
+  mod/                  # C# 模组
+    Generated/          # 生成的 *.g.cs
+  web/                  # 浏览器应用
+packages/
+  contracts/main.tsp    # 契约源文件
+  ipc/                  # 生成的 TypeScript 包
+```
+
+从同一个 `.tsp` 文件生成两端代码。输出包含契约对象、DTO、调用 API 和输入输出验证代码。方法的实际行为由开发者实现。
+
+## 生成与引用
+
+在 Node.js 22 或更新版本中，将 `@adofai-ipc/typespec` 安装为开发依赖，并在仓库根目录编写输出配置。
+
+```json title="adofai-ipc.config.json"
+{
+  "contract": "packages/contracts/main.tsp",
+  "typescript": {
+    "output": "packages/ipc",
+    "packageName": "@example/ipc",
+    "workspace": true
+  },
+  "csharp": {
+    "output": "apps/mod/Generated",
+    "namespace": "Example.Generated"
+  }
+}
+```
+
+```bash
+pnpm exec adofai-ipc generate
+pnpm exec adofai-ipc generate --check
+```
+
+`--check` 不会修改文件；如果生成结果不同则检查失败。生成器只更新或清理自己生成的文件，手写文件应单独存放。
+
+如果生成包的名称为 `@example/ipc`，请将其加入应用依赖。
+
+```json title="apps/web/package.json 中的依赖"
+{
+  "@example/ipc": "workspace:*"
+}
+```
+
+在 pnpm workspace 中包含 `apps/web` 和 `packages/*`，然后在根目录运行 `pnpm install`。应用还需要 `adofai-ipc` 运行时依赖。不要直接修改 `node_modules` 中的生成文件。
+
+## C# 引用与验证
+
+将生成的 `*.g.cs` 文件加入模组项目的编译范围。它们与模组一起编译，不需要为生成代码单独创建 DLL。
+
+修改契约后，按以下顺序验证：
+
+```text
+验证契约 → 生成两端代码 → 应用类型检查与模组构建 → 验证调用
+```
+
+固定生成工具版本与输出配置。如果提交生成文件，应在 CI 中检查重新生成后是否存在差异。不要手动修改生成文件。
+
+如果模组与应用的契约哈希不同，注册会以 `contract_mismatch` 失败。请从修改后的契约生成两端代码并一起部署。
+
+## 模组与应用使用独立仓库
+
+在模组仓库中管理契约源文件。将生成的 C# 代码与模组一起编译，并将对应的完整 TypeScript 生成包复制到网页仓库的 `vendor/` 目录后提交。
+
+```text
+mod-repo/
+  ipc/main.tsp
+  ipc/generated/typescript/   # 传给网页应用的生成包
+  src/Ipc/Generated/          # 由模组编译的 C# 源文件
+
+web-repo/
+  vendor/example-ipc/         # 固定版本的 TS 生成包
+  vendor/adofai-ipc/          # 固定版本的 SDK
+```
+
+从输出配置中移除 `workspace`，并指定 SDK 依赖。该示例将网页的两个 vendor 目录并排放置。
+
+```json title="adofai-ipc.config.json 中的 typescript"
+{
+  "output": "ipc/generated/typescript",
+  "packageName": "@example/ipc",
+  "version": "1.0.0",
+  "runtimeDependency": "file:../adofai-ipc"
+}
+```
+
+```json title="网页 package.json 中的依赖"
+{
+  "adofai-ipc": "file:vendor/adofai-ipc",
+  "@example/ipc": "file:vendor/example-ipc"
+}
+```
+
+在模组仓库中生成并构建后，将完整的 TypeScript 生成包更新到网页仓库，再安装依赖并执行类型检查。每个仓库仅使用自身的文件和锁文件构建，CI 不需要克隆其他仓库。记录传递包的契约哈希和源提交可以追踪版本。
+
+生成工具的 `version` 和 `private` 选项设置输出包中的同名字段。如果发布到 npm，请指定 `private: false` 和版本，并在网页应用中安装精确版本。SDK 自身的依赖也应固定。

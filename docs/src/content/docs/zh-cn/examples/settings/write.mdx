@@ -1,0 +1,107 @@
+---
+title: "4. 添加保存功能"
+description: "为只读项目的契约、模组和应用添加保存功能。"
+---
+
+本步骤**启用输入控件并添加保存按钮**。先修改契约，再连接模组处理器与应用调用。
+
+## 为契约添加保存方法
+
+在原有 `getSettings()` 下方添加 operation，并重新生成两端代码。
+
+```diff title="packages/contracts/main.tsp"
+   op getSettings(): Settings;
++  op updateSettings(settings: Settings): Settings;
+ }
+```
+
+输入和返回值都是 `Settings`。生成后，C# 中增加 `SettingsExampleMethods.UpdateSettings`，应用通道中增加 `updateSettings()`。
+
+## 为模组添加保存处理器
+
+在启用回调的 `mod.MarkReady()` 之前插入处理器，复用现有的 `gate` 和 `current`。
+
+```diff title="模组启用回调"
++mod.Handle(SettingsExampleMethods.UpdateSettings, (request, context) =>
++{
++    lock (gate)
++    {
++        context.CancellationToken.ThrowIfCancellationRequested();
++        current = new Settings
++        {
++            Label = request.Settings.Label,
++            Enabled = request.Settings.Enabled
++        };
++        return Task.FromResult(current);
++    }
++});
++
+ mod.MarkReady();
+ stopIpc = mod.Dispose;
+```
+
+保存时使用新对象替换设置，而不是修改旧对象的字段。读取和保存使用同一个锁，保护对 `current` 的并发访问。返回值是保存后的设置。
+
+## 为界面添加保存按钮
+
+在复选框之后添加按钮。保留 `fieldset` 的 `disabled`，在读取成功后通过代码启用。
+
+```diff title="apps/web/index.html"
+         <label><input id="enabled" type="checkbox" /> 启用</label>
++        <button type="submit">保存</button>
+       </fieldset>
+```
+
+在 `main.ts` 中添加 form 和 fieldset 的引用。
+
+```diff title="apps/web/src/main.ts"
+ import { SettingsExampleContract, type Settings } from "@example/ipc";
+ 
++const form = document.querySelector<HTMLFormElement>("#settings")!;
++const fields = form.querySelector<HTMLFieldSetElement>("fieldset")!;
+ const label = document.querySelector<HTMLInputElement>("#label")!;
+```
+
+在 `loadSettings()` 中，读取成功后启用输入控件。
+
+```diff title="apps/web/src/main.ts — loadSettings() 内部"
+     show(settings);
++    fields.disabled = false;
+     status.textContent = "已加载设置";
+```
+
+## 连接保存请求
+
+在 `main.ts` 最后的 `void loadSettings();` 之前添加以下代码。
+
+```ts title="添加到 apps/web/src/main.ts"
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  fields.disabled = true;
+  try {
+    const settings = await channel.updateSettings({
+      settings: { label: label.value, enabled: enabled.checked },
+    });
+    if (disposed) return;
+    show(settings);
+    status.textContent = "已保存";
+  } catch (error) {
+    if (!disposed) status.textContent = `保存设置失败: ${String(error)}`;
+  } finally {
+    if (!disposed) fields.disabled = false;
+  }
+});
+```
+
+operation 的参数名为 `settings`，因此传入 `{ settings: ... }`。保存期间禁用输入控件和按钮，成功后将模组返回的值显示到界面。发生错误时显示提示，并允许再次编辑。
+
+## 最终验证
+
+构建并安装修改后的模组，重新启用后刷新网页。
+
+1. 读取初始值后，输入控件和保存按钮启用。
+2. 修改文本和勾选状态并保存，状态显示 `已保存`。
+3. 只刷新浏览器，仍能读取保存后的值。
+4. 停用并重新启用模组，恢复为 `Example` 和启用状态。
+
+至此，读取和保存已连接完成。此示例不包含保存到文件或向其他标签页发送实时通知。

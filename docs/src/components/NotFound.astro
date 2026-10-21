@@ -1,0 +1,42 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+
+interface Props { locale: 'ko' | 'en' | 'zh-cn' }
+const { locale } = Astro.props;
+const messages = {
+  ko: {
+    title: '페이지를 찾을 수 없습니다',
+    description: '문서의 주소가 변경되었거나 존재하지 않습니다.',
+    before: '요청한 주소의 문서가 없습니다.',
+    home: '소개',
+    after: '또는 문서 검색을 이용하십시오.',
+    path: '',
+  },
+  en: {
+    title: 'Page not found',
+    description: 'This documentation page has moved or does not exist.',
+    before: 'There is no documentation at this address. Visit the',
+    home: 'introduction',
+    after: 'or use the documentation search.',
+    path: 'en/',
+  },
+  'zh-cn': {
+    title: '找不到页面',
+    description: '该文档页面已移动或不存在。',
+    before: '此地址没有对应的文档。请访问',
+    home: '简介',
+    after: '或使用文档搜索。',
+    path: 'zh-cn/',
+  },
+};
+const message = messages[locale];
+---
+
+<StarlightPage frontmatter={{
+  title: message.title,
+  description: message.description,
+  tableOfContents: false,
+  head: [{ tag: 'meta', attrs: { name: 'robots', content: 'noindex' } }],
+}}>
+  <p>{message.before} <a href={`${import.meta.env.BASE_URL}${message.path}`}>{message.home}</a> {message.after}</p>
+</StarlightPage>

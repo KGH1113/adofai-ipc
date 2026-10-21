@@ -1,0 +1,64 @@
+---
+title: "2. 注册模组"
+description: "为模组添加初始设置和读取处理器。"
+---
+
+本步骤使**模组保存初始设置并响应 `getSettings()`**。网页暂时不连接。
+
+## 准备注册生命周期
+
+停用模组时也必须释放注册。在模组类中添加保存清理函数的字段，并导入 `System` 和 `System.Threading.Tasks` 命名空间。
+
+```csharp title="模组类的字段"
+private Action stopIpc = () => { };
+```
+
+## 启用时注册
+
+在启用回调中添加以下代码。该回调中的 `ipc` 是 SDK 对象，`current` 保存本次启用期间的设置。
+
+```csharp title="添加到模组启用回调"
+var gate = new object();
+var current = new Settings { Label = "Example", Enabled = true };
+
+var mod = ipc.RegisterMod(
+    SettingsExampleContract.Instance,
+    displayName: "Settings Example",
+    allowedOrigins: new[] { "http://localhost:5173" });
+
+mod.Handle(SettingsExampleMethods.GetSettings, (request, context) =>
+{
+    lock (gate)
+    {
+        return Task.FromResult(current);
+    }
+});
+
+mod.MarkReady();
+stopIpc = mod.Dispose;
+```
+
+`GetSettings` 没有输入参数，因此不需要从 `request` 读取字段。处理器返回的 `Task<Settings>` 就是应用的读取结果。
+
+`gate` 是之后保存处理器也会使用的锁。读取和写入操作访问同一份设置，因此使用同一个锁。
+
+安装处理器后再调用 `MarkReady()`。`allowedOrigins` 是上一步启动的网页地址。如果用 `127.0.0.1` 代替 `localhost` 访问，会被视为不同的源。
+
+## 停用时释放
+
+在停用回调中调用清理函数。
+
+```csharp title="添加到模组停用回调"
+stopIpc();
+stopIpc = () => { };
+```
+
+下次启用时创建新的注册和初始设置。请正确连接回调，确保每次启用只执行一次启用代码。
+
+## 验证
+
+构建、安装并启用模组。此时模组已完成注册和初始化，但网页仍显示 `尚未连接模组`，因为应用代码尚未接入。
+
+下一步将验证返回值是否为 `label: "Example"` 和 `enabled: true`。
+
+[下一步：在浏览器中读取模组设置 →](/docs/zh-cn/examples/settings/read/)

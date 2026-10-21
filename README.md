@@ -142,7 +142,7 @@ Helper/Replay 1.0.0이 SDK로 전환된 뒤 실행 중 기존 IPC 폴더를 정�
 
 ## Documentation
 
-[Starlight 개발 문서](docs/README.md)는 TypeSpec 계약, C#·TypeScript API, 코드 생성과
+[한국어·영어·중국어 간체 Starlight 개발 문서](docs/README.md)는 TypeSpec 계약, C#·TypeScript API, 코드 생성과
 저장소 구성을 다룹니다. Node.js 22.22 이상과 저장소에 지정된 pnpm으로 `pnpm install` 후
 `pnpm docs:dev`를 실행합니다. `.env`의 게임·.NET 경로는 기존 빌드 설정을 따릅니다.
 

@@ -1,0 +1,119 @@
+---
+title: "Contract definitions"
+description: "Define mod and app methods and shared types with TypeSpec."
+---
+
+Generate C# and TypeScript APIs from a contract file. You do not define method names, input types, and return types separately on each side.
+
+## Mod methods
+
+The `@ipc.mod` namespace is the registration entry point. Root-level `op` methods are implemented by the mod and called by the app.
+
+```typespec title="main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("echo")
+namespace Echo {
+  op echo(text: string): string;
+}
+```
+
+- `"echo"`: stable mod contract ID, separate from the display name.
+- `Echo`: used to name `EchoContract` and `EchoMethods`.
+- `echo`: method that accepts a string and returns a string.
+
+The app calls `channel.echo({ text: "hello" })`, and the mod registers a handler for `EchoMethods.Echo`. Their result types are `Promise<string>` and `Task<string>`, respectively. Methods without arguments can be called directly, such as `ping()`.
+
+## App methods
+
+An `@ipc.app` interface in the same contract is implemented by the app and called by the mod.
+
+```typespec
+import "@adofai-ipc/typespec";
+
+@ipc.mod("dialogs")
+namespace Dialogs {
+  op requestConfirmation(message: string): boolean;
+
+  @ipc.app
+  interface Browser {
+    confirm(message: string): boolean;
+  }
+}
+```
+
+In this contract, the mod implements `requestConfirmation` and the app implements `confirm`. `@ipc.app` determines the role, not the interface name. Omit the interface when app methods are unnecessary.
+
+## Shared types
+
+Declare structured data with `model`.
+
+```typespec
+model ModInfo {
+  displayName: string;
+  revision: int32;
+}
+```
+
+This becomes `displayName: string` and `revision: number` in TypeScript, and `string DisplayName` and `int Revision` in C#. Generated code handles name conversion and serialization.
+
+| TypeSpec | TypeScript | C# |
+| --- | --- | --- |
+| `string` / `boolean` | `string` / `boolean` | `string` / `bool` |
+| `int32` | `number` | `int` |
+| `float64` | `number` | `double` |
+| `safeint` | `number` | `long` |
+| `T[]` | `Array<T>` | `T[]` |
+| `T \| null` | `T \| null` | `T?` |
+| `field?: T` | `field?: T` | `IpcOptional<T>` |
+| `"fixed"` / `"a" \| "b"` | String literal / literal union | Validated `string` |
+| String enum | Value constants and a union type with the same name | `enum` serialized as a string |
+| `void` return | `Promise<void>` | `Task` handler |
+| `ipc.File` | `ReceivedFile` | `IpcFile` |
+
+Use `ipc.File` in mod return values and app method arguments. It also supports arrays, nullable values, and optional fields. See [File transfers](/docs/en/reference/files/) for transfer behavior.
+
+## Omission and null
+
+`?` permits an omitted field; `| null` permits an explicit `null`. These are independent conditions.
+
+```typespec
+model Patch {
+  label?: string;
+  note?: string | null;
+}
+```
+
+```ts
+const omitted: Patch = {};
+const cleared: Patch = { note: null };
+const changed: Patch = { label: "hello" };
+```
+
+```csharp
+var omitted = new Patch();
+var cleared = new Patch { Note = new IpcOptional<string?>(null) };
+var changed = new Patch { Label = "hello" };
+
+if (cleared.Note.IsSpecified)
+    ApplyNote(cleared.Note.Value); // null in this case
+```
+
+The default `IpcOptional<T>` represents omission. When a value is specified, `IsSpecified` is `true`. Do not read `Value` on an omitted field. This contract does not allow `label: null`.
+
+## String enums and methods without a return value
+
+```typespec
+enum Phase { Pending: "pending", Done: "done" }
+op setPhase(phase: Phase): void;
+```
+
+```ts
+import { Phase } from "@example/ipc";
+
+await channel.setPhase({ phase: Phase.Done });
+```
+
+`Phase.Done` is a constant whose actual value is `"done"`. The `Phase` type with the same name only accepts the allowed strings. In C#, pass the enum value `Phase.Done`; its serialized value is also `"done"`. A `void` call still waits until the peer handler completes or fails.
+
+Regenerate both sides after changing a contract. See [Code generation and repositories](/docs/en/guides/monorepo/) for output references and [Runtime rules](/docs/en/reference/lifecycle/) for value constraints.

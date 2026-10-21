@@ -1,0 +1,17 @@
+{
+  "search.label": "搜索文档",
+  "page.editLink": "编辑此页",
+  "expressiveCode.copyButtonTooltip": "复制到剪贴板",
+  "expressiveCode.copyButtonCopied": "复制成功！",
+  "expressiveCode.terminalWindowFallbackTitle": "终端窗口",
+  "pagefind.clear_search": "清除",
+  "pagefind.load_more": "加载更多结果",
+  "pagefind.search_label": "搜索本文档站点",
+  "pagefind.filters_label": "搜索筛选器",
+  "pagefind.zero_results": "未找到 [SEARCH_TERM] 的结果。",
+  "pagefind.many_results": "找到 [COUNT] 个 [SEARCH_TERM] 的结果",
+  "pagefind.one_result": "找到 [COUNT] 个 [SEARCH_TERM] 的结果",
+  "pagefind.alt_search": "未找到 [SEARCH_TERM] 的结果，改为显示 [DIFFERENT_TERM] 的结果。",
+  "pagefind.search_suggestion": "未找到 [SEARCH_TERM] 的结果，请尝试其他搜索词。",
+  "pagefind.searching": "正在搜索 [SEARCH_TERM]…"
+}

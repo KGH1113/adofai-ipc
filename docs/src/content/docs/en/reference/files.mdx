@@ -1,0 +1,114 @@
+---
+title: "File transfers"
+description: "Declare files in a contract and send them from mods to apps."
+---
+
+`ipc.File` represents a file sent from a mod to an app. The SDK handles the transfer and does not send the body until the app starts reading it.
+
+## Defining the contract
+
+Declare a file as a mod return value or an app method argument.
+
+```typespec title="main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("exports")
+namespace Exports {
+  op exportSettings(): ipc.File;
+
+  @ipc.app interface Browser {
+    receive(file: ipc.File): void;
+  }
+}
+```
+
+Generated C# code uses `IpcFile`; TypeScript uses `ReceivedFile`. Files can also appear in model fields, arrays, nullable values, and optional fields. Uploads through mod arguments or app return values are not supported.
+
+## Returning a file
+
+This handler returns a file from a registered `mod`.
+
+```csharp
+mod.Handle(ExportsMethods.ExportSettings, (request, context) =>
+    Task.FromResult(IpcFile.FromPath(settingsPath, "application/json")));
+```
+
+| Factory API | Arguments and behavior |
+| --- | --- |
+| `FromPath(path, contentType)` | Path of the file to read. The name and size are determined automatically |
+| `FromStream(stream, byteLength, fileName, contentType)` | Stream to read from its current position and the exact byte count. Ownership transfers to the SDK |
+| `FromWriter(writer, byteLength, fileName, contentType)` | `Action<Stream>` invoked when the body is requested. It must write exactly the declared length |
+
+`contentType` defaults to `application/octet-stream`. File names must contain 1–255 characters with no control characters; sizes range from zero to the maximum `safeint` value. Do not reuse a sent `IpcFile` or close it with `using` immediately after returning it. Call `Dispose()` yourself for an object you do not send.
+
+## Reading in the app
+
+The name, MIME type, and size are available before reading.
+
+```ts
+const file = await channel.exportSettings();
+console.log(file.name, file.type, file.size);
+
+const settings = JSON.parse(await file.text());
+```
+
+| `ReceivedFile` API | Return value |
+| --- | --- |
+| `stream({ signal? })` | `ReadableStream<Uint8Array>`. Use streaming for large files |
+| `text({ signal? })` | `Promise<string>` containing the complete UTF-8 text |
+| `arrayBuffer({ signal? })` | `Promise<ArrayBuffer>` containing all bytes |
+| `blob({ signal? })` | `Promise<Blob>` preserving the MIME type |
+| `download()` | `Promise<void>` that hands off to the browser's download mechanism without loading the entire file into JavaScript memory |
+| `used` | `boolean` indicating whether a read API has been called |
+
+A file can be read only once. Call the mod method again to obtain a new file. `signal` cancels reading. `text()`, `arrayBuffer()`, and `blob()` load the entire contents into memory.
+
+## Saving through the browser
+
+Use `download()` to save large files such as recordings. The contract and C# code that provides the `IpcFile` stay the same.
+
+```ts
+const file = await channel.exportSettings();
+await file.download();
+```
+
+The SDK uses validated file information to hand a download request to the browser. The app does not manage tickets or URLs, or first read the complete body with `blob()`. The browser manages the destination, name conflicts, progress, and cancellation. Whether downloads use a default folder or ask for a location depends on browser settings.
+
+The promise resolves **when the download request is handed to the browser**. It does not guarantee that the file was saved or that the HTTP response succeeded. The app may not be able to directly observe blocked requests or network errors. Returning `await file.download()` from an app handler tells the mod that handoff completed, not that saving completed. Keep the IPC connection open during transfer; cancel downloads through the browser UI.
+
+`download()` also consumes the file's single use. The same file cannot be read or downloaded afterward. Disconnection or mod deactivation invalidates old files; request a new file after reconnecting. The 60-second limit for starting a read still applies. Environments without a DOM return `file_download_unavailable`; use `stream()` there.
+
+## Sending to a selected app
+
+The same file type can be sent through a registered app proxy.
+
+```csharp
+if (mod.TryGetApp(appId, out var target))
+    await target.ReceiveAsync(
+        new ReceiveRequest { File = IpcFile.FromPath(exportPath) },
+        cancellationToken);
+```
+
+```ts
+app.use(ExportsContract, {
+  receive: async ({ file }) => {
+    await file.download();
+  },
+});
+```
+
+The app decides whether to save the download, preview an image, or play audio. `ReceiveAsync()` waits until the app handler returns. This example returns after handing the request to the browser. To wait for the body to be read, `await` `text()`, `arrayBuffer()`, or consumption of the stream.
+
+## Lifetime and errors
+
+Start reading a received file within 60 seconds. Files become unusable when the connection closes, the mod registration is disposed, or the cancellation token associated with the transfer is canceled. Request new files after reconnecting. The SDK does not automatically retry a failed read.
+
+| Error code | Condition |
+| --- | --- |
+| `file_expired` | File expired or was already consumed |
+| `invalid_file` | Declared size differs from the received size |
+| `file_transfer_failed` | Error while transferring the body |
+| `file_transfer_unavailable` | Runtime does not support file transfers |
+| `file_download_unavailable` | Environment does not provide browser downloads |
+
+The runtime retains at most 128 unread files across all registrations. The SDK cleans up consumed streams and expired files. File reads do not run on the game thread.

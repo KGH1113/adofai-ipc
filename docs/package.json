@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
-    "build": "astro build",
+    "build": "astro build && node scripts/check-i18n.mjs",
     "check": "astro check",
     "preview": "astro preview --host 127.0.0.1",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const dir of ['dist', '.astro']) rmSync(dir, { recursive: true, force: true });\""

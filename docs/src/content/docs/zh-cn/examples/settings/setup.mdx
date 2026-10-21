@@ -1,0 +1,96 @@
+---
+title: "1. 准备项目与契约"
+description: "创建网页界面和读取契约，并将生成代码接入两端。"
+---
+
+本步骤创建**只有输入控件的页面和读取设置的契约**，暂不添加通信代码。先确认空白页面能正常打开。
+
+## 项目结构
+
+将模组、应用和契约放在同一个仓库中。假设 C# 模组已经具备 SDK 引用以及启用和停用回调。
+
+```text
+apps/mod/                  # C# 模组
+apps/web/                  # 浏览器应用
+packages/contracts/main.tsp # 契约源文件
+packages/ipc/              # 生成的 TypeScript 包
+```
+
+在仓库根目录创建 [Vite TypeScript 应用](https://vite.dev/guide/#scaffolding-your-first-vite-project)，并将其加入 workspace。
+
+```bash
+pnpm create vite apps/web --template vanilla-ts
+```
+
+```yaml title="pnpm-workspace.yaml"
+packages:
+  - apps/web
+  - packages/*
+```
+
+## 空白设置页面
+
+替换模板的 `index.html`。读取设置之前禁用输入，防止修改空值。保存按钮将在最后一步添加。
+
+```html title="apps/web/index.html"
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>模组设置</title>
+  </head>
+  <body>
+    <form id="settings">
+      <fieldset disabled>
+        <label>显示文本 <input id="label" /></label>
+        <label><input id="enabled" type="checkbox" /> 启用</label>
+      </fieldset>
+      <output id="status" aria-live="polite"></output>
+    </form>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
+
+同时将 `src/main.ts` 的模板代码替换为以下内容。`export {}` 使该文件被视为 TypeScript 模块。
+
+```ts title="apps/web/src/main.ts"
+export {};
+
+const status = document.querySelector<HTMLOutputElement>("#status")!;
+status.textContent = "尚未连接模组";
+```
+
+## 读取契约
+
+定义界面上显示的两个字段和读取方法。值由模组管理，应用展示返回结果。
+
+```typespec title="packages/contracts/main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("settings-example")
+namespace SettingsExample {
+  model Settings {
+    label: string;
+    enabled: boolean;
+  }
+
+  op getSettings(): Settings;
+}
+```
+
+从该契约生成 TypeScript 包到 `packages/ipc/`，生成 C# 源文件到 `apps/mod/Generated/`。两端注册都使用生成的 `SettingsExampleContract`，读取结果使用 `Settings`。
+
+在[代码生成配置](/docs/zh-cn/guides/monorepo/#生成与引用)中将 C# 命名空间设为 `SettingsExample.Generated`，然后运行 `pnpm exec adofai-ipc generate`。在应用依赖中添加 `adofai-ipc` 和 `"@example/ipc": "workspace:*"`。生成的 C# 源文件与模组一起编译。
+
+## 验证
+
+在根目录运行 `pnpm install`，然后在 `apps/web` 中启动开发服务器。
+
+```bash
+pnpm dev --host localhost --port 5173 --strictPort
+```
+
+当 `http://localhost:5173` 显示**空文本框、未勾选的复选框以及 `尚未连接模组`**时，准备完成。端口必须与下一步的 `allowedOrigins` 一致。
+
+[下一步：注册模组并提供初始设置 →](/docs/zh-cn/examples/settings/mod/)
