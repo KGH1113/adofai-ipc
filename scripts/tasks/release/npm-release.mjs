@@ -49,6 +49,21 @@ export function verifyIntegrity(bytes, integrity) {
   }
 }
 
+export async function waitForPublication(name, version, {
+  lookup = fetchMetadata,
+  pause = () => new Promise(resolve => setTimeout(resolve, 5_000)),
+  attempts = 36,
+} = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (await lookup(name, version)) return;
+    if (attempt < attempts) {
+      console.log(`Waiting for npm to make ${name}@${version} public (${attempt}/${attempts}).`);
+      await pause();
+    }
+  }
+  throw new Error(`${name}@${version} was accepted but is not public yet. Retry after npm finishes processing it.`);
+}
+
 async function plan(archive) {
   const manifest = JSON.parse(execFileSync('tar', ['-xOzf', archive, 'package/package.json'], { encoding: 'utf8' }));
   if (!packageNames.includes(manifest.name) || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
@@ -93,6 +108,8 @@ async function main() {
       const args = ['publish', item.archive, '--access', 'public', '--registry', registry];
       if (mode === 'publish') args.push('--provenance');
       execFileSync('npm', args, { stdio: 'inherit' });
+      await waitForPublication(item.name, item.version);
+      await plan(item.archive);
     }
   }
 }

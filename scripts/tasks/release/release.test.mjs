@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { changedFiles, fetchMetadata, verifyIntegrity } from './npm-release.mjs';
+import { changedFiles, fetchMetadata, verifyIntegrity, waitForPublication } from './npm-release.mjs';
 
 test('published package comparison catches changed, added, and removed shipped files', () => {
   assert.deepEqual(changedFiles({ a: 'same', b: 'new', c: 'added' }, { a: 'same', b: 'old', d: 'removed' }), ['b', 'c', 'd']);
@@ -25,6 +25,21 @@ test('downloaded tarball must match npm integrity', () => {
   const bytes = Buffer.from('package');
   verifyIntegrity(bytes, `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`);
   assert.throws(() => verifyIntegrity(bytes, 'sha512-incorrect'), /integrity/);
+});
+
+test('accepted npm publishes must become public before docs deployment continues', async () => {
+  let requests = 0;
+  let pauses = 0;
+  await waitForPublication('test', '1.0.0', {
+    lookup: async () => ++requests === 3 ? {} : null,
+    pause: async () => { pauses++; },
+    attempts: 3,
+  });
+  assert.equal(requests, 3);
+  assert.equal(pauses, 2);
+  await assert.rejects(waitForPublication('test', '1.0.0', {
+    lookup: async () => null, pause: async () => {}, attempts: 2,
+  }), /not public yet/);
 });
 
 test('documentation links remain under the public /docs mount', () => {
