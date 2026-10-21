@@ -337,7 +337,8 @@ def create_fault_inputs(out, receipts):
 
 
 def generate(args):
-    out = safe_output(args.out)
+    output = DEFAULT_OUT.parent / "migration-smoke" if args.smoke and args.out == str(DEFAULT_OUT) else args.out
+    out = safe_output(output)
     cases_root = out / "cases"
     if cases_root.exists() and not args.replace:
         raise ValueError("Generated cases already exist; use --replace to reset only the fixture copies.")
@@ -359,6 +360,9 @@ def generate(args):
     cases = []
     skipped = []
     for definition in definitions():
+        if args.smoke and definition["name"] != "03-both-old-ipc-old":
+            continue
+        definition["title"] = definition["title"].replace("0.4.2", args.ipc_tag.removeprefix("v"))
         needed = [kind + "-" + definition[kind] for kind in SPECS if definition[kind]]
         if any(key not in receipts for key in needed):
             skipped.append(definition["name"])
@@ -399,7 +403,8 @@ def generate(args):
             encoding="utf-8",
         )
         cases.append(metadata)
-    create_fault_inputs(out, receipts)
+    if not args.smoke:
+        create_fault_inputs(out, receipts)
     write_json(out / "provenance.json", receipts)
     report = {"schema": 1, "fixtureRoot": str(out), "preparedCases": len(cases), "cases": cases,
               "skippedUntilPublished": skipped, "automated": {
@@ -410,7 +415,7 @@ def generate(args):
                   "unityGameE2e": False, "windowsLoadedFileDeletion": False}}
     write_json(out / "report.json", report)
     index = ["# SDK 전환 테스트 Mods 세트", "", f"준비된 사례: {len(cases)}개. 게임 E2E: 아직 실행하지 않음.", "",
-             "실행 안내: [migration-e2e.md](" + str(REPO_ROOT / "docs/migration-e2e.md") + ").",
+             "실행 안내: [확인 절차](" + str(REPO_ROOT / ("docs/migration-smoke.md" if args.smoke else "docs/migration-e2e.md")) + ").",
              "실제 출처와 해시는 [provenance.json](provenance.json), 자동 확인 결과는 [report.json](report.json)을 확인한다.", "",
              "| 세트 | 내용 | 네트워크 |", "| --- | --- | --- |"]
     for item in cases:
@@ -496,10 +501,11 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("generate")
     create.add_argument("--out", default=str(DEFAULT_OUT))
-    create.add_argument("--ipc-tag", default="v0.4.2")
+    create.add_argument("--ipc-tag", default="v0.4.3")
     create.add_argument("--helper-tag", default="v1.0.0")
     create.add_argument("--replay-tag", default="v1.0.0")
     create.add_argument("--baseline-only", action="store_true")
+    create.add_argument("--smoke", action="store_true", help="Prepare only the normal old-to-new test in build/migration-smoke.")
     create.add_argument("--replace", action="store_true", help="Reset generated case copies under the fixture root.")
     verify = commands.add_parser("inspect")
     verify.add_argument("--case", required=True, help="Prepared case directory, not its Mods child.")

@@ -18,8 +18,8 @@ require_file "$ADOFAIIPC_PACKAGE_ZIP.sha256"
 # A new SDK release must never silently move that endpoint to a DLL-only bundle.
 repo="KGH1113/adofai-ipc"
 legacy_tag="$(gh api "repos/$repo/releases/latest" --jq .tag_name)"
-if [ "$legacy_tag" != "v0.4.2" ]; then
-  printf 'Expected legacy Latest v0.4.2; found %s. Resolve the legacy update channel first.\n' "$legacy_tag" >&2
+if [ "$legacy_tag" != "v0.4.3" ]; then
+  printf 'Expected legacy Latest v0.4.3; found %s. Resolve the legacy update channel first.\n' "$legacy_tag" >&2
   exit 1
 fi
 for asset in AdofaiIpc.zip AdofaiIpc.zip.sha256 AdofaiIpc.update.json; do
