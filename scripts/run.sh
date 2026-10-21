@@ -17,6 +17,7 @@ Commands:
   sdk-sync  Export the typed browser SDK with its transport bundled
   client-pack  Check and pack the SDK to ADOFAIIPC_CLIENT_PACK_DESTINATION
   typespec-pack  Check and pack the TypeSpec generator
+  publish-sdk  Publish a prepared SDK GitHub release without changing legacy Latest
   check    Validate shell scripts, version metadata and architecture boundaries
   help     Show this help
 USAGE
@@ -30,6 +31,7 @@ case "${1:-help}" in
   sdk-sync) shift; exec node "$SCRIPTS_DIR/tasks/client/export-sdk.mjs" "$@" ;;
   client-pack) exec "$SCRIPTS_DIR/workflows/client-pack.sh" ;;
   typespec-pack) exec bash "$SCRIPTS_DIR/workflows/typespec-pack.sh" ;;
+  publish-sdk) shift; exec bash "$SCRIPTS_DIR/tasks/release/publish-sdk.sh" "$@" ;;
   check) exec "$SCRIPTS_DIR/workflows/check-scripts.sh" ;;
   help|-h|--help) usage ;;
   *)

@@ -125,7 +125,19 @@ Mods/ExampleMod/
 
 Contracts와 Loader의 AssemblyVersion은 계약 major 1에서 `1.0.0.0`으로 유지합니다.
 제품 버전·계약 major·wire major·기능별 메시지 major는 별도로 관리합니다.
-새 DLL은 게임 재시작 후 적용하며 실행 중 교체하지 않습니다.
+프로세스에서 한 번 선택한 런타임은 게임 종료까지 유지합니다. 최초 SDK 전환은 같은 실행에
+적용할 수 있으며, 이미 선택된 런타임을 다른 버전으로 바꾸려면 게임을 재시작합니다.
+
+기존 독립 모드의 마지막 전환 릴리스는 `v0.4.2`이며 GitHub Latest로 유지합니다.
+Helper/Replay 1.0.0이 SDK로 전환된 뒤 실행 중 기존 IPC 폴더를 정리합니다.
+전환 실패 시에는 기존 설치를 보존합니다. 구버전 업데이터의
+`releases/latest/download/AdofaiIpc.*` 경로를 유지하려면 SDK 릴리스를 Latest로 지정하지 않아야 합니다.
+준비한 SDK 태그·ZIP·checksum을 게시할 때는
+`./scripts/run.sh publish-sdk <vSDK-version> <release-notes-file>`을 사용합니다.
+이 명령은 기존 Latest의 세 전환 파일을 확인하고 `--latest=false`로 SDK만 게시합니다.
+
+[SDK 전환 수동 E2E 안내](docs/migration-e2e.md)와
+`scripts/testing/migration_e2e.py`는 실제 공개 구버전·신버전으로 독립된 Mods 테스트 세트를 준비합니다.
 
 ## Documentation
 
