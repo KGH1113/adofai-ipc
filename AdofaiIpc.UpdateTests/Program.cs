@@ -23,9 +23,10 @@ internal static class Program
       Run("retirement preserves offline or unmigrated consumers", TestRetirementWait);
       Run("retirement immediately removes IPC and preserves consumer data", TestRetirementDelete);
       Run("retirement rejects wrong identity and linked directories", TestRetirementSafety);
+      Run("successful runtime promotion synchronizes Info.json", TestInstalledMetadata);
       if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ADOFAIIPC_LEGACY_LAUNCHER")))
       {
-        Run("published 0.4.1 updater accepts and stages 0.4.2", TestPublishedUpdater);
+        Run("published 0.4.1 updater accepts and stages 0.4.3", TestPublishedUpdater);
         Run("loaded compatibility code remains executable after immediate removal", TestLoadedRemoval);
       }
       Console.WriteLine("Passed " + _passed + " updater tests.");
@@ -168,18 +169,18 @@ internal static class Program
       Assert(System.Diagnostics.FileVersionInfo.GetVersionInfo(oldLauncher).ProductVersion == "0.4.1", "The fixture is not deployed IPC 0.4.1.");
       Type manifestType = assembly.GetType("AdofaiIpc.Launcher.UpdateManifest", true);
       object manifest = Activator.CreateInstance(manifestType, nonPublic: true);
-      foreach (var property in new (string Name, object Value)[] { ("SchemaVersion", 1), ("Version", "0.4.2"), ("PackageSize", new FileInfo(zip).Length), ("Sha256", Hash(zip)), ("PackageUrl", "https://github.com/KGH1113/adofai-ipc/releases/download/v0.4.2/AdofaiIpc.zip") })
+      foreach (var property in new (string Name, object Value)[] { ("SchemaVersion", 1), ("Version", "0.4.3"), ("PackageSize", new FileInfo(zip).Length), ("Sha256", Hash(zip)), ("PackageUrl", "https://github.com/KGH1113/adofai-ipc/releases/download/v0.4.3/AdofaiIpc.zip") })
         manifestType.GetProperty(property.Name).SetValue(manifest, property.Value);
       Type installer = assembly.GetType("AdofaiIpc.Launcher.PackageInstaller", true);
       installer.GetMethod("VerifyPackage").Invoke(null, new[] { zip, manifest });
       using TemporaryDirectory temporary = new();
       string root = (string)installer.GetMethod("ExtractAndValidate").Invoke(null, new[] { zip, temporary.Path, manifest });
-      Assert(File.Exists(Path.Combine(root, "Runtime", "versions", "0.4.2", "AdofaiIpc.dll")), "The old validator did not accept the new runtime.");
+      Assert(File.Exists(Path.Combine(root, "Runtime", "versions", "0.4.3", "AdofaiIpc.dll")), "The old validator did not accept the new runtime.");
       string installed = Path.Combine(temporary.Path, "Mods", "AdofaiIpc");
       new UpdateStateStore(installed).Save(new UpdateState { Current = "0.4.1" });
       File.WriteAllText(Path.Combine(installed, "Info.json"), "{\"Id\":\"AdofaiIpc\",\"Version\":\"0.4.1\"}");
       installer.GetMethod("InstallCandidate").Invoke(null, new[] { installed, root, manifest });
-      Assert(new UpdateStateStore(installed).Load().Trial == "0.4.2", "The old updater did not stage 0.4.2.");
+      Assert(new UpdateStateStore(installed).Load().Trial == "0.4.3", "The old updater did not stage 0.4.3.");
       Assert(AdofaiIpc.Retirement.LegacyRetirement.Ready(installed, out _), "The old root Info version incorrectly prevented retirement after auto-update.");
       AdofaiIpc.Retirement.LegacyRetirement.Delete(installed);
       Assert(!Directory.Exists(installed), "The actual staged upgrade could not retire its old root installation.");
@@ -204,6 +205,21 @@ internal static class Program
       Assert(parse.Invoke(null, new object[] { "1.0.0" }) != null, "Loaded code stopped executing after its directory was removed.");
     }
     finally { context.Unload(); }
+  }
+
+  private static void TestInstalledMetadata()
+  {
+    using TemporaryDirectory temporary = new();
+    string path = Path.Combine(temporary.Path, "Info.json");
+    File.WriteAllText(path, "{\"Id\":\"AdofaiIpc\",\"Version\":\"0.4.1\",\"AssemblyName\":\"AdofaiIpc.Shim.dll\",\"EntryMethod\":\"AdofaiIpc.Shim.Shim.Load\",\"Custom\":42}");
+    InstalledMetadata.Promote(temporary.Path, "0.4.3");
+    var info = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
+    Assert((string)info["Version"] == "0.4.3" && (int)info["Custom"] == 42, "Metadata promotion lost the active version or existing fields.");
+    Assert((string)info["AssemblyName"] == "AdofaiIpc.Shim.dll", "The fixed shim entry point changed.");
+    InstalledMetadata.Promote(temporary.Path, "0.4.3");
+    Assert(!Directory.GetFiles(temporary.Path, "*.tmp-*").Any(), "Metadata promotion left a partial file.");
+    File.WriteAllText(path, "{\"Id\":\"Other\",\"Version\":\"0.4.1\"}");
+    Throws(() => InstalledMetadata.Promote(temporary.Path, "0.4.3"), "Another mod's metadata was modified.");
   }
 
   private static string Hash(string path)

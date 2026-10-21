@@ -20,7 +20,7 @@ internal static class LegacyRetirement
     // The published updater stages versioned DLLs but deliberately leaves root Info.json
     // unchanged. Its on-disk product version can still be 0.3.0/0.4.0/0.4.1 in this run.
     if ((string)owner["Id"] != "AdofaiIpc" || !Version.TryParse((string)owner["Version"], out Version version) ||
-        version < new Version(0, 3, 0) || version > new Version(0, 4, 2))
+        version < new Version(0, 3, 0) || version > new Version(0, 4, 3))
       throw new InvalidDataException("Refusing to retire an unexpected IPC installation.");
     string mods = Path.GetDirectoryName(root);
     foreach (string mod in Directory.EnumerateDirectories(mods))

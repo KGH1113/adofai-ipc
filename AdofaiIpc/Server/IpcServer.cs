@@ -92,6 +92,11 @@ public sealed class IpcServer
       {
         lastError = e;
       }
+      catch (System.Net.Sockets.SocketException e)
+      {
+        // Unity Mono reports a bound port directly as SocketException.
+        lastError = e;
+      }
       catch (Exception e)
       {
         lastError = e;

@@ -1,0 +1,25 @@
+<Project>
+  <!-- Public signing establishes a stable Mono assembly identity. Package checksums
+       provide integrity; this public key is not an authentication credential. -->
+  <UsingTask TaskName="DecodeLegacyIdentity" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Source ParameterType="System.String" Required="true" />
+      <Destination ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Destination));
+        System.IO.File.WriteAllBytes(Destination,
+          System.Convert.FromBase64String(System.IO.File.ReadAllText(Source)));
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="PrepareLegacyIdentity" BeforeTargets="CoreCompile"
+          Condition="'$(LegacySignedIdentity)' == 'true'"
+          Inputs="$(MSBuildThisFileDirectory)build-keys/legacy-identity.public.base64"
+          Outputs="$(AssemblyOriginatorKeyFile)">
+    <DecodeLegacyIdentity Source="$(MSBuildThisFileDirectory)build-keys/legacy-identity.public.base64"
+                          Destination="$(AssemblyOriginatorKeyFile)" />
+  </Target>
+</Project>

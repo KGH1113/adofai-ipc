@@ -44,7 +44,7 @@ public static class EntryPoint
   private static bool InvokeCandidate(UnityModManager.ModEntry owner, string version)
   {
     string path = Path.Combine(owner.Path, "Launcher", "versions", version, "AdofaiIpc.Launcher.dll");
-    Assembly assembly = Assembly.LoadFrom(path);
+    Assembly assembly = AssemblyIdentity.LoadExact(path);
     Type type = assembly.GetType("AdofaiIpc.Launcher.EntryPoint", true);
     MethodInfo method = type.GetMethod("LoadInstalled", BindingFlags.Public | BindingFlags.Static, null,
       new[] { typeof(UnityModManager.ModEntry) }, null) ?? throw new MissingMethodException(type.FullName, "LoadInstalled");
@@ -57,14 +57,19 @@ public static class EntryPoint
     string path = Path.Combine(owner.Path, "Runtime", "versions", version, "AdofaiIpc.dll");
     if (!File.Exists(path)) throw new FileNotFoundException("AdofaiIpc runtime is missing.", path);
     owner.Info.Version = version;
-    Assembly assembly = Assembly.LoadFrom(path);
+    Assembly assembly = AssemblyIdentity.LoadExact(path);
     Type type = assembly.GetType("AdofaiIpc.Main", true);
     MethodInfo load = type.GetMethod("Load", BindingFlags.Public | BindingFlags.Static, null,
       new[] { typeof(UnityModManager.ModEntry) }, null) ?? throw new MissingMethodException(type.FullName, "Load");
     try
     {
       object result = load.Invoke(null, new object[] { owner });
-      if (load.ReturnType != typeof(bool) || result is bool value && value) return true;
+      if (load.ReturnType != typeof(bool) || result is bool value && value)
+      {
+        InstalledMetadata.Promote(owner.Path, version);
+        owner.Logger.Log("[AutoUpdate] Running IPC runtime " + assembly.GetName().Version + " from " + assembly.Location);
+        return true;
+      }
     }
     catch (Exception exception)
     {

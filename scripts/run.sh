@@ -14,6 +14,8 @@ Commands:
   package  Build and verify the mod ZIP and checksum
   client   Check and test the npm client
   client-pack  Check and pack the npm client to ADOFAIIPC_CLIENT_PACK_DESTINATION
+  mono-upgrade  Verify published old DLL upgrades in a single Unity Mono process
+  unity-upgrade  Verify real runtime startup and removal in isolated Unity Play Mode
   check    Validate all shell scripts and version metadata
   help     Show this help
 USAGE
@@ -24,6 +26,8 @@ case "${1:-help}" in
   package) exec "$SCRIPTS_DIR/workflows/package.sh" ;;
   client) exec "$SCRIPTS_DIR/workflows/client.sh" ;;
   client-pack) exec "$SCRIPTS_DIR/workflows/client-pack.sh" ;;
+  mono-upgrade) exec bash "$SCRIPTS_DIR/tasks/test/mono-upgrade.sh" ;;
+  unity-upgrade) exec bash "$SCRIPTS_DIR/tasks/test/unity-upgrade.sh" ;;
   check) exec "$SCRIPTS_DIR/workflows/check-scripts.sh" ;;
   help|-h|--help) usage ;;
   *)

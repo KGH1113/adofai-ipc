@@ -19,12 +19,19 @@
 
 ## Overview
 
-**0.4.2 is the final standalone transition release.** Helper and Replay 1.0.0
+**0.4.3 is the final standalone transition release.** Helper and Replay 1.0.0
 bundle the IPC SDK. Once their installed entry points and SDK files have been
 migrated, this release removes `Mods/AdofaiIpc` during the running game without
 a modal or restart request. Its already loaded compatibility runtime remains
 available for the rest of that session. Failed/offline consumer updates keep
 the legacy installation for another attempt rather than trigger reinstall loops.
+
+0.4.3 fixes Mono reusing the already loaded weak-named 0.4.1/0.4.2 launcher
+and runtime even when another DLL path was requested. The new assemblies use
+a distinct, stable public-signed identity and the launcher verifies the actual
+loaded image. This is assembly identity, not a code-signing trust assertion;
+the package SHA-256 remains the download integrity check. Successful runtime
+startup also atomically updates the installed `Info.json` version.
 
 Removal runs on a worker after startup returns to Unity, so the original
 Launcher/Shim can finish saving their update state. The folder is detached to
@@ -67,8 +74,8 @@ Mods/
     ├── AdofaiIpc.Shim.dll
     ├── AdofaiIpc.dll                 # 0.2.0 installer compatibility copy
     ├── Update/state.json
-    ├── Launcher/versions/0.4.2/AdofaiIpc.Launcher.dll
-    └── Runtime/versions/0.4.2/AdofaiIpc.dll
+    ├── Launcher/versions/0.4.3/AdofaiIpc.Launcher.dll
+    └── Runtime/versions/0.4.3/AdofaiIpc.dll
 ```
 
 Bootstrap을 포함한 의존 모드는 AdofaiIpc가 없을 때 GitHub Releases에서 최신 패키지를
@@ -116,6 +123,13 @@ Create and verify the mod archive and SHA-256 checksum with:
 ```bash
 ./scripts/run.sh package
 ```
+
+Run `./scripts/run.sh mono-upgrade` after packaging to test the unmodified
+published 0.4.1 and 0.4.2 installers/shims with their old DLLs already loaded
+in one Unity Mono process. `./scripts/run.sh unity-upgrade` additionally starts
+an isolated Unity Play Mode project under `build` and verifies actual runtime
+startup, metadata/state promotion and frame-driven removal. Neither test uses
+or modifies the game's Mods directory.
 
 Use `./scripts/run.sh client` for the npm client only and `./scripts/run.sh check` to validate
 version metadata and shell scripts.
