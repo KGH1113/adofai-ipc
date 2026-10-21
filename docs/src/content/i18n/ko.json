@@ -1,6 +1,9 @@
 {
   "search.label": "문서 검색",
   "page.editLink": "이 문서 수정하기",
+  "expressiveCode.copyButtonTooltip": "클립보드로 복사",
+  "expressiveCode.copyButtonCopied": "복사 완료!",
+  "expressiveCode.terminalWindowFallbackTitle": "터미널 창",
   "pagefind.clear_search": "지우기",
   "pagefind.load_more": "검색 결과 더 보기",
   "pagefind.search_label": "이 문서 사이트 검색",

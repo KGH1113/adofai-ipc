@@ -1,0 +1,95 @@
+---
+title: "Mod API"
+description: "Register a mod, implement handlers, and call apps."
+---
+
+`ipc` is the `IIpcRuntime` obtained at the mod entry point. Contract and method types are generated from TypeSpec.
+
+```csharp
+using AdofaiIpc;
+using AdofaiIpc.Loader;
+
+var ipc = IpcLoader.GetRuntime(modsDirectory);
+```
+
+`modsDirectory` is the game's Mods directory. Call this from the mod activation callback on the game thread and reference `AdofaiIpc.Contracts.dll` and `AdofaiIpc.Loader.dll`. Also import the namespace of the generated types with `using`.
+
+## Registration and method handlers
+
+Register a contract with `RegisterMod()` and implement its methods with `Handle()`. This example uses the contract `op echo(text: string): string;`.
+
+```csharp
+using System.Threading.Tasks;
+
+var mod = ipc.RegisterMod(
+    EchoContract.Instance,
+    displayName: "Echo",
+    allowedOrigins: new[] { "http://localhost:5173" });
+
+mod.Handle(EchoMethods.Echo, (request, context) =>
+    Task.FromResult(request.Text));
+
+mod.MarkReady();
+```
+
+| API or argument | Description |
+| --- | --- |
+| `EchoContract.Instance` | Generated object containing the contract ID, methods, and types |
+| `displayName` | Display name of the mod |
+| `allowedOrigins` | Browser origins allowed to connect |
+| `Handle(method, handler)` | Attach a `Task<T>` handler to a generated method, or a `Task` handler for a `void` return |
+| `MarkReady()` | Allow calls after handlers are installed and initialization completes |
+| `MarkError(code, message)` | Put the registration into an error state and reject new calls |
+
+`RegisterMod()` returns a mod registration. Two registrations with the same contract ID cannot exist at once. The handler above receives an `EchoRequest`, whose `Text` is a `string`, and returns `Task<string>`.
+
+An origin consists of a scheme, host, and port. `http://localhost:5173` and `http://localhost:4321` are different origins. Do not include page paths in the allowlist.
+
+## Calling the requesting app
+
+`context.App` is the app that sent the current request. This example calls the app's `confirm(message: string): boolean` method from a `mod` registered with `DialogsContract`.
+
+```csharp
+mod.Handle(DialogsMethods.RequestConfirmation, async (request, context) =>
+{
+    return await context.App.ConfirmAsync(
+        new ConfirmRequest { Message = request.Message },
+        context.CancellationToken);
+});
+```
+
+`ConfirmAsync()` returns the app handler's result as `Task<bool>`. It calls the requesting app, rather than other tabs or every app. See [App API](/docs/en/reference/app/#providing-app-methods) for the corresponding app implementation.
+
+## Selecting a registered app
+
+When the mod initiates a call, select a currently registered app from `Apps`. The app method in this example is `notify(message: string): void;`.
+
+```csharp
+var connectedApps = mod.Apps;
+
+if (mod.TryGetApp(appId, out var target))
+    await target.NotifyAsync(
+        new NotifyRequest { Message = "Task complete" }, cancellationToken);
+```
+
+`Apps` is a snapshot taken when the property is read. `TryGetApp()` looks up the UUID `appId` and returns `false` if it is absent. A connection can close after you obtain the list, so handle failures and cancellation for each call. When notifying multiple apps, handle errors individually so one failed app does not block the rest.
+
+| App API | Behavior |
+| --- | --- |
+| `AppConnected` / `AppDisconnected` | App registration completed / connection closed events. Reconnection supplies a new proxy |
+| `AppEventFailed` | Reports exceptions thrown by event subscribers |
+| `app.AppId` / `DisplayName` | Stable app registration ID / display name |
+| `app.SessionId` | Current connection session ID |
+| `app.CancellationToken` | Canceled when the connection closes or the mod registration is disposed |
+
+Subscribe to events before `MarkReady()`. `AppConnected` fires after the registration response is sent, allowing you to deliver initial state. Event callbacks have type `Action<TApp>`: run asynchronous work in a separate function or queue and handle its exceptions. Pass `context.CancellationToken` to app calls inside a handler to also honor cancellation of the current request.
+
+## Disposing a registration
+
+Dispose of the registration you own when the mod is disabled or unloaded.
+
+```csharp
+mod.Dispose();
+```
+
+Other mods remain registered. Do not reuse a disposed object; create a new registration when reactivating the mod. See [Runtime rules](/docs/en/reference/lifecycle/) for cancellation and threading requirements.

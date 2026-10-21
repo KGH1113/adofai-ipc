@@ -1,0 +1,114 @@
+---
+title: "文件传输"
+description: "在契约中声明文件，并从模组发送给应用。"
+---
+
+`ipc.File` 表示从模组发送给应用的文件。SDK 负责实际传输，在应用开始读取之前不会发送文件正文。
+
+## 定义契约
+
+将文件声明为模组方法的返回值或应用方法的参数。
+
+```typespec title="main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("exports")
+namespace Exports {
+  op exportSettings(): ipc.File;
+
+  @ipc.app interface Browser {
+    receive(file: ipc.File): void;
+  }
+}
+```
+
+生成后，C# 使用 `IpcFile`，TypeScript 使用 `ReceivedFile`。文件还可以放在模型字段、数组、可空值和可选字段中。不支持通过模组参数或应用返回值上传文件。
+
+## 返回文件
+
+以下处理器从已经注册的 `mod` 返回文件。
+
+```csharp
+mod.Handle(ExportsMethods.ExportSettings, (request, context) =>
+    Task.FromResult(IpcFile.FromPath(settingsPath, "application/json")));
+```
+
+| 创建 API | 参数与行为 |
+| --- | --- |
+| `FromPath(path, contentType)` | 要读取的文件路径；自动获取文件名和大小 |
+| `FromStream(stream, byteLength, fileName, contentType)` | 从当前位置读取的流，以及精确的字节数；所有权移交给 SDK |
+| `FromWriter(writer, byteLength, fileName, contentType)` | 请求正文时执行的 `Action<Stream>`，必须写入声明的字节数 |
+
+`contentType` 默认为 `application/octet-stream`。文件名必须为 1–255 个字符且不含控制字符，大小范围为 0 到 `safeint` 的最大值。不要复用已经发送的 `IpcFile`，也不要在返回后立即用 `using` 关闭它。未发送的对象需要自行调用 `Dispose()`。
+
+## 在应用中读取
+
+读取之前即可获取文件名、MIME 类型和大小。
+
+```ts
+const file = await channel.exportSettings();
+console.log(file.name, file.type, file.size);
+
+const settings = JSON.parse(await file.text());
+```
+
+| `ReceivedFile` API | 返回值 |
+| --- | --- |
+| `stream({ signal? })` | `ReadableStream<Uint8Array>`，大文件应使用流式读取 |
+| `text({ signal? })` | 包含全部 UTF-8 文本的 `Promise<string>` |
+| `arrayBuffer({ signal? })` | 包含全部字节的 `Promise<ArrayBuffer>` |
+| `blob({ signal? })` | 保留 MIME 类型的 `Promise<Blob>` |
+| `download()` | 将请求交给浏览器下载机制的 `Promise<void>`，不会把整个文件读入 JavaScript 内存 |
+| `used` | 表示是否已调用读取 API 的 `boolean` |
+
+每个文件只能读取一次。如需再次读取，请重新调用模组方法。`signal` 用于取消读取。`text()`、`arrayBuffer()` 和 `blob()` 会把全部内容读入内存。
+
+## 通过浏览器保存
+
+保存录制文件等大文件时，使用 `download()`。契约和提供 `IpcFile` 的 C# 代码保持不变。
+
+```ts
+const file = await channel.exportSettings();
+await file.download();
+```
+
+SDK 使用已验证的文件信息将下载请求交给浏览器。应用无需处理票据或 URL，也无需先用 `blob()` 读取完整正文。保存位置、文件名冲突、进度和取消下载由浏览器管理。是否使用默认下载目录或询问保存位置取决于浏览器设置。
+
+Promise 在**下载请求交给浏览器后**完成，不保证文件已保存，也不保证 HTTP 响应成功。如果浏览器阻止了请求或发生网络错误，应用可能无法直接观察到。在应用处理器中返回 `await file.download()`，只会通知模组请求已移交，并不表示保存完成。传输期间需要保持 IPC 连接，取消下载请使用浏览器的下载界面。
+
+`download()` 同样会消耗文件的单次使用机会，之后不能再读取或下载同一个文件。连接断开或模组停用后，旧文件会失效，需要在重连后请求新文件。开始读取的 60 秒限制仍然适用。没有 DOM 的环境会返回 `file_download_unavailable` 错误，请在该环境中使用 `stream()`。
+
+## 发送给指定应用
+
+也可以通过已注册的应用代理发送相同的文件类型。
+
+```csharp
+if (mod.TryGetApp(appId, out var target))
+    await target.ReceiveAsync(
+        new ReceiveRequest { File = IpcFile.FromPath(exportPath) },
+        cancellationToken);
+```
+
+```ts
+app.use(ExportsContract, {
+  receive: async ({ file }) => {
+    await file.download();
+  },
+});
+```
+
+由应用决定保存下载、预览图片还是播放音频。`ReceiveAsync()` 会等待应用处理器返回。此示例在请求交给浏览器后返回。如果需要等待正文读取完毕，请 `await` `text()`、`arrayBuffer()` 或流的消费过程。
+
+## 生命周期与错误
+
+收到文件后必须在 60 秒内开始读取。连接断开、模组注册释放或传输关联的取消令牌被取消后，文件将无法使用。重连后请请求新文件。传输失败时 SDK 不会自动重新读取。
+
+| 错误代码 | 条件 |
+| --- | --- |
+| `file_expired` | 文件已过期或已被使用 |
+| `invalid_file` | 声明的大小与接收的大小不一致 |
+| `file_transfer_failed` | 正文传输过程中发生错误 |
+| `file_transfer_unavailable` | 运行时不支持文件传输 |
+| `file_download_unavailable` | 执行环境不提供浏览器下载功能 |
+
+整个运行时最多保留 128 个尚未读取的文件。SDK 会清理已使用的流和过期文件。文件读取不会在游戏线程上执行。

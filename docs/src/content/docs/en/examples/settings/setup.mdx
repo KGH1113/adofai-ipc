@@ -1,0 +1,96 @@
+---
+title: "1. Prepare the project and contract"
+description: "Create the web page and read contract, then reference generated code on both sides."
+---
+
+In this step, create **a page containing only inputs and a contract for reading settings**. Communication code comes later. First, confirm that the empty page opens.
+
+## Project structure
+
+Keep the mod, app, and contract in one repository. This example assumes the C# mod already has SDK references and activation/deactivation callbacks.
+
+```text
+apps/mod/                  # C# mod
+apps/web/                  # Browser app
+packages/contracts/main.tsp # Contract source
+packages/ipc/              # Generated TypeScript package
+```
+
+Create a [Vite TypeScript app](https://vite.dev/guide/#scaffolding-your-first-vite-project) from the repository root and include it in the workspace.
+
+```bash
+pnpm create vite apps/web --template vanilla-ts
+```
+
+```yaml title="pnpm-workspace.yaml"
+packages:
+  - apps/web
+  - packages/*
+```
+
+## Empty settings page
+
+Replace the template's `index.html`. Disable the inputs so users cannot edit empty values before settings load. The save button is added in the last step.
+
+```html title="apps/web/index.html"
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mod settings</title>
+  </head>
+  <body>
+    <form id="settings">
+      <fieldset disabled>
+        <label>Display text <input id="label" /></label>
+        <label><input id="enabled" type="checkbox" /> Enabled</label>
+      </fieldset>
+      <output id="status" aria-live="polite"></output>
+    </form>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
+
+Replace the template code in `src/main.ts` as shown below. `export {}` makes this file a TypeScript module.
+
+```ts title="apps/web/src/main.ts"
+export {};
+
+const status = document.querySelector<HTMLOutputElement>("#status")!;
+status.textContent = "Not connected to mod";
+```
+
+## Read contract
+
+Define the two fields shown on the page and a method to read them. The mod owns the values; the app displays the result.
+
+```typespec title="packages/contracts/main.tsp"
+import "@adofai-ipc/typespec";
+
+@ipc.mod("settings-example")
+namespace SettingsExample {
+  model Settings {
+    label: string;
+    enabled: boolean;
+  }
+
+  op getSettings(): Settings;
+}
+```
+
+Generate a TypeScript package in `packages/ipc/` and C# sources in `apps/mod/Generated/` from this contract. Both sides use the generated `SettingsExampleContract` for registration and `Settings` for the query result.
+
+In the [code generation configuration](/docs/en/guides/monorepo/#generating-and-referencing-code), set the C# namespace to `SettingsExample.Generated` and run `pnpm exec adofai-ipc generate`. Add `adofai-ipc` and `"@example/ipc": "workspace:*"` to the app's dependencies. Compile the generated C# sources with the mod.
+
+## Verify
+
+Run `pnpm install` at the root, then start the development server from `apps/web`.
+
+```bash
+pnpm dev --host localhost --port 5173 --strictPort
+```
+
+Preparation is complete when `http://localhost:5173` shows **an empty text input, an unchecked checkbox, and `Not connected to mod`**. The port must match `allowedOrigins` in the next step.
+
+[Next: register the mod and provide initial settings →](/docs/en/examples/settings/mod/)

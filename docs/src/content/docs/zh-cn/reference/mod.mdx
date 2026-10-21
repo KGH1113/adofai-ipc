@@ -1,0 +1,95 @@
+---
+title: "模组 API"
+description: "注册模组、实现处理器并调用应用。"
+---
+
+`ipc` 是在模组入口获取的 `IIpcRuntime`。契约和方法类型由 TypeSpec 生成。
+
+```csharp
+using AdofaiIpc;
+using AdofaiIpc.Loader;
+
+var ipc = IpcLoader.GetRuntime(modsDirectory);
+```
+
+`modsDirectory` 是游戏的 Mods 目录。请在游戏线程的模组启用回调中调用，并引用 `AdofaiIpc.Contracts.dll` 和 `AdofaiIpc.Loader.dll`。还需要使用 `using` 导入生成类型所在的命名空间。
+
+## 注册与方法实现
+
+使用 `RegisterMod()` 注册契约，使用 `Handle()` 实现方法。以下示例的契约为 `op echo(text: string): string;`。
+
+```csharp
+using System.Threading.Tasks;
+
+var mod = ipc.RegisterMod(
+    EchoContract.Instance,
+    displayName: "Echo",
+    allowedOrigins: new[] { "http://localhost:5173" });
+
+mod.Handle(EchoMethods.Echo, (request, context) =>
+    Task.FromResult(request.Text));
+
+mod.MarkReady();
+```
+
+| API 或参数 | 说明 |
+| --- | --- |
+| `EchoContract.Instance` | 包含契约 ID、方法与类型的生成对象 |
+| `displayName` | 模组的显示名称 |
+| `allowedOrigins` | 允许访问的浏览器源（Origin）列表 |
+| `Handle(method, handler)` | 为生成的方法绑定返回 `Task<T>` 的处理器；返回 `void` 的方法使用 `Task` 处理器 |
+| `MarkReady()` | 安装处理器并完成初始化后允许调用 |
+| `MarkError(code, message)` | 将注册置为错误状态并拒绝新的调用 |
+
+`RegisterMod()` 返回模组注册对象。同一个契约 ID 不能同时重复注册。上述处理器接收 `EchoRequest`，其中 `Text` 为 `string`，结果为 `Task<string>`。
+
+源由协议、主机和端口共同确定。`http://localhost:5173` 与 `http://localhost:4321` 属于不同的源。允许列表中不应包含页面路径。
+
+## 调用发起请求的应用
+
+`context.App` 表示发送当前请求的应用。以下示例在使用 `DialogsContract` 注册的 `mod` 中调用应用的 `confirm(message: string): boolean` 方法。
+
+```csharp
+mod.Handle(DialogsMethods.RequestConfirmation, async (request, context) =>
+{
+    return await context.App.ConfirmAsync(
+        new ConfirmRequest { Message = request.Message },
+        context.CancellationToken);
+});
+```
+
+`ConfirmAsync()` 将应用处理器的结果以 `Task<bool>` 返回。它只调用当前请求的发送方，不会调用其他标签页或所有应用。对应的应用实现请参阅[应用 API](/docs/zh-cn/reference/app/#提供应用方法)。
+
+## 选择已注册的应用
+
+当模组主动调用时，从 `Apps` 中选择当前已注册的应用。以下示例中的应用方法为 `notify(message: string): void;`。
+
+```csharp
+var connectedApps = mod.Apps;
+
+if (mod.TryGetApp(appId, out var target))
+    await target.NotifyAsync(
+        new NotifyRequest { Message = "任务完成" }, cancellationToken);
+```
+
+`Apps` 是读取该属性时的列表快照。`TryGetApp()` 通过 UUID 格式的 `appId` 查找应用，不存在时返回 `false`。获取列表后连接仍可能断开，因此需要处理每次调用的失败与取消。向多个应用发送通知时，应分别处理错误，避免一个应用失败导致其他通知无法发送。
+
+| 应用 API | 行为 |
+| --- | --- |
+| `AppConnected` / `AppDisconnected` | 应用注册完成／连接断开事件；重连后提供新的代理 |
+| `AppEventFailed` | 报告事件订阅者抛出的异常 |
+| `app.AppId` / `DisplayName` | 应用的固定注册 ID／显示名称 |
+| `app.SessionId` | 当前连接的会话 ID |
+| `app.CancellationToken` | 连接断开或模组注册释放时取消的令牌 |
+
+在调用 `MarkReady()` 之前订阅事件。`AppConnected` 在注册响应发送后触发，此时可以传递初始状态。事件回调的类型为 `Action<TApp>`，因此异步任务应在单独的函数或队列中执行，并处理异常。在处理器内调用应用时传入 `context.CancellationToken`，还可以响应当前请求的取消。
+
+## 释放注册
+
+模组停用或卸载时，释放自己持有的注册。
+
+```csharp
+mod.Dispose();
+```
+
+其他模组的注册不受影响。不要复用已经释放的对象；重新启用时应创建新的注册。取消与线程要求请参阅[运行规则](/docs/zh-cn/reference/lifecycle/)。

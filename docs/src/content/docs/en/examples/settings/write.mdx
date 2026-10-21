@@ -1,0 +1,107 @@
+---
+title: "4. Add saving"
+description: "Add saving to the contract, mod, and app of the read-only project."
+---
+
+In this step, **enable the inputs and add a save button**. Change the contract first, then connect the mod handler and app call.
+
+## Add a save method to the contract
+
+Add an operation below the existing `getSettings()` and regenerate both sides.
+
+```diff title="packages/contracts/main.tsp"
+   op getSettings(): Settings;
++  op updateSettings(settings: Settings): Settings;
+ }
+```
+
+The input and result are both `Settings`. Generation adds `SettingsExampleMethods.UpdateSettings` in C# and `updateSettings()` on the app channel.
+
+## Add a save handler to the mod
+
+Insert this handler immediately before `mod.MarkReady()` in the activation callback. Reuse the existing `gate` and `current`.
+
+```diff title="Mod activation callback"
++mod.Handle(SettingsExampleMethods.UpdateSettings, (request, context) =>
++{
++    lock (gate)
++    {
++        context.CancellationToken.ThrowIfCancellationRequested();
++        current = new Settings
++        {
++            Label = request.Settings.Label,
++            Enabled = request.Settings.Enabled
++        };
++        return Task.FromResult(current);
++    }
++});
++
+ mod.MarkReady();
+ stopIpc = mod.Dispose;
+```
+
+Saving replaces the settings with a new object instead of mutating fields on the old one. Reads and writes share a lock to protect concurrent access to `current`. The result is the settings after saving.
+
+## Add a save button to the page
+
+Add the button after the checkbox. Keep `disabled` on the `fieldset`; code will enable it after a successful query.
+
+```diff title="apps/web/index.html"
+         <label><input id="enabled" type="checkbox" /> Enabled</label>
++        <button type="submit">Save</button>
+       </fieldset>
+```
+
+Add references to the form and fieldset in `main.ts`.
+
+```diff title="apps/web/src/main.ts"
+ import { SettingsExampleContract, type Settings } from "@example/ipc";
+ 
++const form = document.querySelector<HTMLFormElement>("#settings")!;
++const fields = form.querySelector<HTMLFieldSetElement>("fieldset")!;
+ const label = document.querySelector<HTMLInputElement>("#label")!;
+```
+
+In `loadSettings()`, enable the inputs after a successful query.
+
+```diff title="apps/web/src/main.ts — inside loadSettings()"
+     show(settings);
++    fields.disabled = false;
+     status.textContent = "Settings loaded";
+```
+
+## Connect the save request
+
+Add the following code before the final `void loadSettings();` in `main.ts`.
+
+```ts title="Add to apps/web/src/main.ts"
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  fields.disabled = true;
+  try {
+    const settings = await channel.updateSettings({
+      settings: { label: label.value, enabled: enabled.checked },
+    });
+    if (disposed) return;
+    show(settings);
+    status.textContent = "Saved";
+  } catch (error) {
+    if (!disposed) status.textContent = `Failed to save settings: ${String(error)}`;
+  } finally {
+    if (!disposed) fields.disabled = false;
+  }
+});
+```
+
+The operation argument is named `settings`, so pass `{ settings: ... }`. Inputs and the button are disabled while saving. On success, the page displays the values returned by the mod. On error, it displays a message and enables editing again.
+
+## Final verification
+
+Build and install the updated mod, reactivate it, and refresh the web page.
+
+1. The inputs and save button become enabled after loading the initial values.
+2. Change the text and checkbox, then save. The status becomes `Saved`.
+3. Refresh only the browser: the saved values are loaded again.
+4. Disable and reactivate the mod: values reset to `Example` and enabled.
+
+Reading and saving are now connected. This example does not add saving to a file or live notifications to other tabs.

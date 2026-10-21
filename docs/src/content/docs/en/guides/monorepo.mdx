@@ -1,0 +1,109 @@
+---
+title: "Code generation and repository structure"
+description: "Reference generated code in a monorepo or separate repositories."
+---
+
+Keep the mod, browser app, and TypeSpec contract in the same monorepo when possible. This lets you update and validate a contract and both implementations in one PR.
+
+## Directory structure
+
+Separate contract sources from generated output.
+
+```text
+apps/
+  mod/                  # C# mod
+    Generated/          # Generated *.g.cs
+  web/                  # Browser app
+packages/
+  contracts/main.tsp    # Contract source
+  ipc/                  # Generated TypeScript package
+```
+
+Generate both sides from the same `.tsp` file. The output includes contract objects, DTOs, call APIs, and input/output validation. Implement the actual method behavior yourself.
+
+## Generating and referencing code
+
+On Node.js 22 or later, install `@adofai-ipc/typespec` as a development dependency and create the output configuration at the repository root.
+
+```json title="adofai-ipc.config.json"
+{
+  "contract": "packages/contracts/main.tsp",
+  "typescript": {
+    "output": "packages/ipc",
+    "packageName": "@example/ipc",
+    "workspace": true
+  },
+  "csharp": {
+    "output": "apps/mod/Generated",
+    "namespace": "Example.Generated"
+  }
+}
+```
+
+```bash
+pnpm exec adofai-ipc generate
+pnpm exec adofai-ipc generate --check
+```
+
+`--check` does not change files and fails when the generated output differs. The generator only updates or removes files it generated; keep handwritten files separate.
+
+If the generated package is named `@example/ipc`, add it to the app's dependencies.
+
+```json title="Dependencies in apps/web/package.json"
+{
+  "@example/ipc": "workspace:*"
+}
+```
+
+Include `apps/web` and `packages/*` in the pnpm workspace and run `pnpm install` at the root. The app also needs `adofai-ipc` as a runtime dependency. Do not edit generated files inside `node_modules`.
+
+## C# references and validation
+
+Include the generated `*.g.cs` files in the mod project's compilation. They compile with the mod, so no separate generated-code DLL is needed.
+
+After changing a contract, validate in this order:
+
+```text
+Validate contract → generate both sides → type-check app and build mod → verify calls
+```
+
+Pin the generator version and output configuration. If you commit generated files, have CI check that regeneration produces no differences. Do not edit generated files by hand.
+
+If the mod and app contract hashes differ, registration fails with `contract_mismatch`. Regenerate both sides from the changed contract and deploy them together.
+
+## Separate mod and app repositories
+
+Keep the contract source in the mod repository. Compile the generated C# with the mod, and copy and commit the matching generated TypeScript package into the web repository's `vendor/` directory.
+
+```text
+mod-repo/
+  ipc/main.tsp
+  ipc/generated/typescript/   # Generated package to copy to the web app
+  src/Ipc/Generated/          # C# sources compiled by the mod
+
+web-repo/
+  vendor/example-ipc/         # Pinned generated TS package
+  vendor/adofai-ipc/          # Pinned SDK
+```
+
+Remove `workspace` from the output configuration and specify the SDK dependency. This example places the two web vendor directories next to each other.
+
+```json title="typescript in adofai-ipc.config.json"
+{
+  "output": "ipc/generated/typescript",
+  "packageName": "@example/ipc",
+  "version": "1.0.0",
+  "runtimeDependency": "file:../adofai-ipc"
+}
+```
+
+```json title="Dependencies in the web package.json"
+{
+  "adofai-ipc": "file:vendor/adofai-ipc",
+  "@example/ipc": "file:vendor/example-ipc"
+}
+```
+
+After generating and building in the mod repository, update the complete generated TypeScript package in the web repository, then install dependencies and type-check. Each repository builds from its own files and lockfile; CI does not clone another repository. Record the contract hash and source commit of the transferred package for traceability.
+
+The generator's `version` and `private` options set the corresponding fields in the output package. To publish it to npm, set `private: false`, specify a version, and install that exact version in the web app. Pin the SDK dependency as well.

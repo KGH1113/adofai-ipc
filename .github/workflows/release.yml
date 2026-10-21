@@ -79,9 +79,17 @@ jobs:
             sleep 1
           done
           python3 -c 'import json,os; assert json.load(open(os.environ["RUNNER_TEMP"]+"/metadata.json"))["gitSHA"]==os.environ["BUILD_SHA"]'
-          curl --fail --silent http://127.0.0.1:4180/docs/ > /dev/null
-          curl --fail --silent http://127.0.0.1:4180/docs/reference/app/ > /dev/null
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4180/docs/nonexistent/)" = 404
+          for prefix in '' en/ zh-cn/; do
+            case "$prefix" in
+              '') language=ko ;;
+              en/) language=en ;;
+              zh-cn/) language=zh-CN ;;
+            esac
+            curl --fail --silent "http://127.0.0.1:4180/docs/${prefix}" > /dev/null
+            curl --fail --silent "http://127.0.0.1:4180/docs/${prefix}reference/app/" > /dev/null
+            test "$(curl -s -o "$RUNNER_TEMP/not-found.html" -w '%{http_code}' "http://127.0.0.1:4180/docs/${prefix}nonexistent/")" = 404
+            grep -q "lang=\"$language\"" "$RUNNER_TEMP/not-found.html"
+          done
           docker save "adofai-ipc-docs:$BUILD_SHA" | gzip --fast > "$RUNNER_TEMP/docs-image.tar.gz"
       - uses: actions/upload-artifact@v4
         with:

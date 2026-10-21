@@ -1,6 +1,24 @@
 # ADOFAI IPC 개발 문서
 
-Astro Starlight 기반 한국어 개발 문서입니다. TypeSpec 계약, C#·TypeScript API, 양방향 호출과 저장소 구성을 다룹니다.
+Astro Starlight 기반 한국어·영어·중국어 간체 개발 문서입니다. TypeSpec 계약, C#·TypeScript API, 양방향 호출과 저장소 구성을 다룹니다.
+
+## 언어와 번역
+
+| 언어 | 문서 경로 | 콘텐츠 폴더 | UI 번역 |
+| --- | --- | --- | --- |
+| 한국어 (기본) | `/docs/` | `src/content/docs/` | `src/content/i18n/ko.json` |
+| English | `/docs/en/` | `src/content/docs/en/` | `src/content/i18n/en.json` |
+| 简体中文 | `/docs/zh-cn/` | `src/content/docs/zh-cn/` | `src/content/i18n/zh-CN.json` |
+
+언어 전환은 같은 문서의 번역으로 이동합니다. 사이드바는 `astro.config.mjs`의 `translations`,
+목차·테마 선택 등 기본 UI는 Starlight의 내장 번역을 사용합니다. 검색 색인은 언어별로 생성합니다.
+한국어 파일을 기준으로 동일한 상대 경로의 영어·중국어 파일을 함께 관리합니다.
+문서 링크는 해당 언어 경로를 사용하고, 제목을 번역하면 링크의 앵커도 함께 갱신합니다.
+예제의 API·계약 식별자는 유지하며 표시 문구와 주석을 번역합니다.
+
+`pnpm docs:build`는 번역 누락, 언어 메타데이터, 언어 간 문서 링크, 앵커·정적 자원,
+검색 UI의 치환 변수와 언어별 색인을 검사합니다. 404 페이지는 `src/components/NotFound.astro`에서
+언어별 문구를 관리하고 `deploy/docs/nginx.conf`에서 각 언어의 404 경로로 연결합니다.
 
 ## 로컬 실행
 

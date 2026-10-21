@@ -1,0 +1,42 @@
+---
+title: "Runtime rules"
+description: "Required rules for validation, errors, cancellation, and execution."
+---
+
+## Type validation
+
+Inputs are validated against the contract before a handler runs; results are validated after it returns. Missing required fields, extra fields, undeclared `null`, and strings outside an enum are rejected. A validation failure produces a call error instead of a normal result. Every array element is checked with the same rules.
+
+- `int32`: integers from −2,147,483,648 to 2,147,483,647.
+- `safeint`: integers from −9,007,199,254,740,991 to 9,007,199,254,740,991. C# `long` values must also stay within this range.
+- `float64`: finite double-precision numbers. `NaN` and `Infinity` are not allowed.
+
+There is no implicit conversion, such as accepting the string `"1"` for a numeric field. See [Contract definitions](/docs/en/learn/contract/#shared-types) for type mappings and the distinction between omission and null.
+
+Type validation does not replace business rules. Handlers must separately enforce positive-value constraints, access permissions, and arithmetic overflow checks.
+
+## Readiness and shutdown
+
+- Mod: call `MarkReady()` after registration and initialization. Call `Dispose()` when disabling the mod.
+- App: `ready()` waits for mod readiness and the app registration response. Call `dispose()` when the owner shuts down.
+- Individual calls can still fail after readiness if the peer shuts down or execution fails. Do not reuse disposed registrations.
+
+On reconnection, the app registers again and `onStatus()` reports `ready`. Query a fresh snapshot to recover state changes missed while disconnected. `appId` lasts for the registration's lifetime, while `sessionId` changes with every connection. An app proxy obtained by a mod belongs to that session only; do not reuse a disconnected proxy for a new session.
+
+## Cancellation and retries
+
+C# handlers check cancellation through `context.CancellationToken`. The token is canceled on disconnection or mod disposal, so pass it to work and app calls.
+
+```csharp
+context.CancellationToken.ThrowIfCancellationRequested();
+```
+
+To cancel long-running work, expose a separate contract method such as `cancelJob(jobId)`. A call timeout alone does not mean the long-running operation was canceled.
+
+Cancellation, timeouts, and output validation failures do not roll back changes already made. If the connection closes before the result arrives, it may be unclear whether the request ran. Do not unconditionally resend mutations. Query state after reconnecting or use operation IDs to prevent duplicates. The SDK does not automatically replay requests.
+
+## Threads and shared state
+
+Access Unity objects on the game thread. Do not assume you are still on that thread after `await`. Move long computations and file processing off the game thread.
+
+Multiple calls may read or modify shared state. Protect the required sections, but do not hold a lock while waiting for an app response. The mod must handle state changes that occur during the wait.
