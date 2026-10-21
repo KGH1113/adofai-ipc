@@ -58,7 +58,7 @@ mod.Handle(DialogsMethods.RequestConfirmation, async (request, context) =>
 });
 ```
 
-`ConfirmAsync()`는 앱 handler의 결과를 `Task<bool>`로 반환합니다. 다른 탭이나 모든 앱을 호출하는 의미가 아닙니다. 대응하는 앱 구현은 [앱 API](/reference/app/#앱-메서드-제공)를 참고하세요.
+`ConfirmAsync()`는 앱 handler의 결과를 `Task<bool>`로 반환합니다. 다른 탭이나 모든 앱을 호출하는 의미가 아닙니다. 대응하는 앱 구현은 [앱 API](/docs/reference/app/#앱-메서드-제공)를 참고하세요.
 
 ## 등록된 앱 선택
 
@@ -92,4 +92,4 @@ if (mod.TryGetApp(appId, out var target))
 mod.Dispose();
 ```
 
-다른 모드의 등록은 유지됩니다. 해제한 객체는 재사용하지 않고 재활성화 시 새로 등록합니다. 취소와 실행 스레드 조건은 [동작 규칙](/reference/lifecycle/)을 참고하세요.
+다른 모드의 등록은 유지됩니다. 해제한 객체는 재사용하지 않고 재활성화 시 새로 등록합니다. 취소와 실행 스레드 조건은 [동작 규칙](/docs/reference/lifecycle/)을 참고하세요.

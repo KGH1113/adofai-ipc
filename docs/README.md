@@ -11,7 +11,7 @@ pnpm install
 pnpm docs:dev
 ```
 
-개발 서버의 기본 포트는 4321입니다. 터미널에 출력된 주소로 접속합니다.
+개발 서버의 기본 포트는 4321이며 문서 경로는 `/docs/`입니다. 터미널에 출력된 주소로 접속합니다.
 
 ## 검사와 빌드
 
@@ -23,7 +23,10 @@ pnpm docs:preview
 
 정적 결과는 `docs/dist/`에 생성됩니다. 위 명령은 문서 사이트를 대상으로 합니다. C# 프로젝트의 빌드는 저장소 루트의 `./scripts/run.sh build`를 사용합니다.
 
-배포 시 `astro.config.mjs`의 `site`에 실제 사이트 주소를 지정합니다. `site`가 없으면 sitemap 생성을 건너뜁니다.
+공개 주소는 https://adofai-ipc.impl1113.dev/docs/입니다. `astro.config.mjs`의 `site`와 `base`에
+이 주소를 설정합니다. 문서 내부의 절대 링크도 `/docs/`로 시작해야 합니다.
+`main` 반영 시 GitHub Actions가 npm 패키지와 문서를 배포합니다. 최초 계정 연결과 홈서버 설정은
+[배포 안내](../deploy/README.md)를 참고하십시오.
 
 ## 파일 구성
 

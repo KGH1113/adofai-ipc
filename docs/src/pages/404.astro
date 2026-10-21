@@ -10,6 +10,6 @@ import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
   }}
 >
   <p>
-    요청한 주소의 문서가 없습니다. <a href="/">소개</a> 또는 문서 검색을 이용하십시오.
+    요청한 주소의 문서가 없습니다. <a href={import.meta.env.BASE_URL}>소개</a> 또는 문서 검색을 이용하십시오.
   </p>
 </StarlightPage>
