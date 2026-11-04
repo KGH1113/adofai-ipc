@@ -1,13 +1,26 @@
 import { ReceivedFile } from "../../api/received-file";
+import { OpenedFile } from "../../api/opened-file";
 import { IpcCallError } from "../../api/errors";
 import type { FileReader } from "../../ports/file-reader";
 import type { FileDownloader } from "../../ports/file-downloader";
-import { decodeFileReference } from "../../schemas/file-reference";
+import type { FileOpener } from "../../ports/file-opener";
+import { decodeFileReference, type FileReference } from "../../schemas/file-reference";
 
 export class IncomingFiles {
   private lifetime = new AbortController();
   constructor(private readonly reader: FileReader | undefined, private readonly origin: () => string | undefined,
-    private readonly downloader?: FileDownloader) {}
+    private readonly downloader?: FileDownloader, private readonly opener?: FileOpener) {}
+
+  /** The runtime closes opened files when their session ends; reads after that fail the same way. */
+  private async open(file: FileReference, opener: FileOpener, lifetime: AbortSignal, signal?: AbortSignal): Promise<OpenedFile> {
+    if (lifetime.aborted) throw lifetime.reason;
+    return opener.open({ url: file.url, signal }).then(url => new OpenedFile(url, file.fileName, file.contentType, file.byteLength,
+      (start, end, readSignal) => {
+        if (lifetime.aborted) throw lifetime.reason;
+        return opener.read({ url, start, end, signal: readSignal });
+      },
+      () => opener.close(url)));
+  }
   decode = (value: unknown): ReceivedFile => {
     const file = decodeFileReference(value, this.origin());
     const lifetime = this.lifetime.signal;
@@ -52,7 +65,7 @@ export class IncomingFiles {
     }, this.downloader ? () => {
       if (lifetime.aborted) throw lifetime.reason;
       this.downloader!({ url: file.url, signal: lifetime });
-    } : undefined);
+    } : undefined, this.opener ? options => this.open(file, this.opener!, lifetime, options.signal) : undefined);
   };
   invalidate(reason = new IpcCallError("unavailable", "The file's app session disconnected. Request a new file after reconnecting.")): void {
     this.lifetime.abort(reason); this.lifetime = new AbortController();

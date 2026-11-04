@@ -1,6 +1,6 @@
 {
   "name": "@adofai-ipc/typespec",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "license": "MIT",
   "description": "TypeSpec contracts and TypeScript/C# code generation for ADOFAI IPC.",

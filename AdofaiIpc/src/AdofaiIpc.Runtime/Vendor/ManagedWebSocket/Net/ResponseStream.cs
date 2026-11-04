@@ -206,7 +206,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
 
     private bool flushHeaders ()
     {
-      if (!_response.SendChunked) {
+      if (!_response.SendChunked && !_response.StreamsFixedLengthBody) {
         if (_response.ContentLength64 != _bodyBuffer.Length)
           return false;
       }
@@ -382,7 +382,7 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
 
       var sendChunked = _sendChunked || _response.SendChunked;
 
-      if (!sendChunked)
+      if (!sendChunked && !_response.StreamsFixedLengthBody)
         return;
 
       flush (false);

@@ -6,7 +6,7 @@ connection discovery, reconnection, app registration and contract validation.
 ## Install
 
 ```sh
-npm install --save-exact adofai-ipc@2.1.0
+npm install --save-exact adofai-ipc@2.2.0
 ```
 
 The ADOFAI mod must include the compatible ADOFAI-IPC 2.1 runtime bundle. This
@@ -70,6 +70,25 @@ Use `stream({ signal })`, `text()`, `arrayBuffer()` or `blob()` to consume file
 contents inside the app instead. Choose one consumption method per file, start
 within 60 seconds, and request a new file after reconnecting. `download()` requires
 a browser document; stream reading remains available in other environments.
+
+## Opening files for repeated reads
+
+To play or preview a large file, open it instead of reading it whole. The
+runtime (2.2.0 or later) serves the opened file at a URL that accepts HTTP Range
+requests, so a media element loads only what it plays and seeks:
+
+```ts
+const file = await channel.exportRecording();
+const opened = await file.open();
+video.src = opened.url;
+const header = opened.read({ start: 0, end: 1024 }); // bytes 0 to 1023, again and again
+await opened.close();
+```
+
+If the source cannot seek (`file_not_seekable`) or the runtime is older
+(`file_open_unavailable`), `open()` rejects and leaves the file unread, so
+`stream()` or `download()` still work. An opened file closes on `close()`, when
+its session ends, or after 30 minutes without requests.
 
 ## License
 

@@ -7,3 +7,4 @@ export type { Channel, ChannelStatus } from "./api/channel";
 export type { MethodDefinition, ContractDefinition, IpcContract } from "./models/contract";
 export type { ValueSchema, Models } from "./models/value-schema";
 export { ReceivedFile, type FileReadOptions } from "./api/received-file";
+export { OpenedFile, type FileRange } from "./api/opened-file";
