@@ -59,6 +59,7 @@ const settings = JSON.parse(await file.text());
 | `arrayBuffer({ signal? })` | `Promise<ArrayBuffer>` containing all bytes |
 | `blob({ signal? })` | `Promise<Blob>` preserving the MIME type |
 | `download()` | `Promise<void>` that hands off to the browser's download mechanism without loading the entire file into JavaScript memory |
+| `open({ signal? })` | `Promise<OpenedFile>` for repeated reads at any position. See [Opening for repeated reads](#opening-for-repeated-reads) |
 | `used` | `boolean` indicating whether a read API has been called |
 
 A file can be read only once. Call the mod method again to obtain a new file. `signal` cancels reading. `text()`, `arrayBuffer()`, and `blob()` load the entire contents into memory.
@@ -77,6 +78,33 @@ The SDK uses validated file information to hand a download request to the browse
 The promise resolves **when the download request is handed to the browser**. It does not guarantee that the file was saved or that the HTTP response succeeded. The app may not be able to directly observe blocked requests or network errors. Returning `await file.download()` from an app handler tells the mod that handoff completed, not that saving completed. Keep the IPC connection open during transfer; cancel downloads through the browser UI.
 
 `download()` also consumes the file's single use. The same file cannot be read or downloaded afterward. Disconnection or mod deactivation invalidates old files; request a new file after reconnecting. The 60-second limit for starting a read still applies. Environments without a DOM return `file_download_unavailable`; use `stream()` there.
+
+## Opening for repeated reads
+
+Use `open()` to read the same file many times, and only the parts you need, as when previewing a video or audio file. The runtime's HTTP server opens the file at a URL that accepts HTTP Range requests (206), so the body never has to be loaded into JavaScript memory. The contract and C# code stay the same; runtime 2.2.0 or later is required.
+
+```ts
+const file = await channel.exportVideo();
+const opened = await file.open();
+
+video.src = opened.url; // The browser requests only what playback and seeking need.
+
+const header = opened.read({ start: 0, end: 1024 }); // bytes 0 to 1023
+
+await opened.close(); // Releases the file handle in the game.
+```
+
+| `OpenedFile` API | Return value |
+| --- | --- |
+| `url` | A loopback URL that works directly in `<video>`, `<audio>`, `<img>`, and links |
+| `name`, `type`, `size` | The received file's name, MIME type, and size |
+| `read({ start?, end?, signal? })` | `ReadableStream<Uint8Array>` of the bytes from `start` up to, but not including, `end` (as in `Blob.slice`). It can be called any number of times |
+| `close()` | `Promise<void>` that closes the file. Calling it again does nothing |
+| `closed` | `boolean` indicating whether `close()` was called |
+
+`open()` also consumes the file's single use, but a failure leaves the file unread, so it can still be read with `stream()` or `download()`. A source that cannot seek (`FromWriter()` or a non-seekable stream) is refused with `file_not_seekable`; `FromPath()` and a seekable `FromStream()` can always be opened. When the runtime is older than 2.2.0 or the file expired, `open()` rejects with `file_open_unavailable`.
+
+An opened file closes when `close()` is called, its app session ends, its mod is unregistered, or nothing requests it for 30 minutes. The received file's 60-second limit applies to calling `open()`. The URL's token is the capability, so media requests without an `Origin` header are accepted; a request with an `Origin` must come from an origin the mod allows. Responses carry `Content-Disposition: inline` and `Content-Security-Policy: sandbox`, so opening a document such as HTML never runs script on the runtime's origin. Up to 64 files can be open at once.
 
 ## Sending to a selected app
 
@@ -110,5 +138,9 @@ Start reading a received file within 60 seconds. Files become unusable when the 
 | `file_transfer_failed` | Error while transferring the body |
 | `file_transfer_unavailable` | Runtime does not support file transfers |
 | `file_download_unavailable` | Environment does not provide browser downloads |
+| `file_not_seekable` | The source cannot seek, so `open()` refused it. The file is left unread |
+| `file_open_unavailable` | The runtime is older than 2.2.0 or the file expired, so `open()` failed. The file is left unread |
+| `file_open_limit` | 64 files are already open |
+| `file_closed` | An `OpenedFile` was read after it was closed |
 
 The runtime retains at most 128 unread files across all registrations. The SDK cleans up consumed streams and expired files. File reads do not run on the game thread.

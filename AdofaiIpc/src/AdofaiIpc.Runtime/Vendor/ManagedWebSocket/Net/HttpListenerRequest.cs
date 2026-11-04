@@ -715,12 +715,8 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
           return;
         }
 
-        if (_contentLength == 0 && !_chunked) {
-          _context.ErrorStatusCode = 411;
-          _context.ErrorMessage = "Invalid Content-Length header";
-
-          return;
-        }
+        // ADOFAI-IPC: an empty body (Content-Length: 0) is valid HTTP, and it is
+        // what browsers send for a POST without a body, such as opening a file.
       }
 
       var expect = _headers["Expect"];

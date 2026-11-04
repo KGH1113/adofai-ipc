@@ -1,4 +1,5 @@
 import { IpcCallError } from "./errors";
+import type { OpenedFile } from "./opened-file";
 
 export interface FileReadOptions { signal?: AbortSignal }
 
@@ -7,7 +8,8 @@ export class ReceivedFile {
   private consumed = false;
   constructor(readonly name: string, readonly type: string, readonly size: number,
     private readonly read: (options: FileReadOptions) => ReadableStream<Uint8Array>,
-    private readonly startDownload?: () => void) {}
+    private readonly startDownload?: () => void,
+    private readonly openFile?: (options: FileReadOptions) => Promise<OpenedFile>) {}
   get used(): boolean { return this.consumed; }
   stream(options: FileReadOptions = {}): ReadableStream<Uint8Array> {
     if (this.consumed) throw new TypeError("This IPC file has already been read. Request a new file to read it again.");
@@ -28,5 +30,19 @@ export class ReceivedFile {
     if (!this.startDownload) throw new IpcCallError("file_download_unavailable", "Browser downloads are unavailable in this environment. Read the file as a stream instead.");
     this.consumed = true;
     this.startDownload();
+  }
+
+  /** Open this file for repeated reads at any position without loading it into memory.
+   * Give the URL to a media element or an image, or read byte ranges with read(). Close it when done.
+   * Rejects with file_not_seekable or file_open_unavailable and leaves the file unread,
+   * so it can still be read with stream() or download().
+   */
+  async open(options: FileReadOptions = {}): Promise<OpenedFile> {
+    if (this.consumed) throw new TypeError("This IPC file has already been read. Request a new file to read it again.");
+    if (!this.openFile) throw new IpcCallError("file_open_unavailable", "Opening files is unavailable in this environment. Read the file as a stream instead.");
+    if (options.signal?.aborted) throw options.signal.reason;
+    this.consumed = true;
+    try { return await this.openFile(options); }
+    catch (error) { this.consumed = false; throw error; }
   }
 }

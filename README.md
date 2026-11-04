@@ -27,7 +27,7 @@ TypeSpec 계약에서 C#·TypeScript API를 생성합니다. 모드는 `Register
 메서드를 구현하고, 앱은 `registerApp()`과 `use()`로 얻은 채널에서 호출합니다.
 모드는 등록된 앱을 선택해 먼저 호출하거나 요청한 앱에 응답할 수 있습니다. SDK가 연결·재접속·직렬화와 입력·결과 검증을 처리합니다.
 
-제품 버전은 **2.1.0**입니다. v1은 별도로 릴리즈하지 않으며 v0에서 바로 v2로 전환합니다.
+제품 버전은 **2.2.0**입니다. v1은 별도로 릴리즈하지 않으며 v0에서 바로 v2로 전환합니다.
 
 ## Architecture
 
@@ -39,6 +39,7 @@ TypeSpec 계약에서 C#·TypeScript API를 생성합니다. 모드는 `Register
 - 모드에서 외부 앱으로 보내는 명령과 같은 프로세스 안의 클라이언트
 - 연결 종료·기능 해제에 따른 명령 취소
 - `ipc.File` 반환·앱 알림을 통한 파일 스트리밍 전송
+- 받은 파일을 URL로 열어 필요한 구간만 여러 번 읽기(HTTP Range, 영상·오디오 미리보기)
 - loopback 전용 연결, 메시지·작업 큐 제한, 연결 생존 확인
 
 계약 정의와 API는 [Starlight 문서](docs/README.md)에 있습니다. 모드·앱·계약은 같은 모노레포에서 관리하는 것을 권장합니다.
@@ -67,7 +68,7 @@ JavaScript SDK는 npm에서 설치합니다. 소비 앱의 `package-lock.json` �
 배포 tarball의 버전과 무결성을 고정합니다.
 
 ```bash
-npm install --save-exact adofai-ipc@2.1.0
+npm install --save-exact adofai-ipc@2.2.0
 ```
 
 TypeSpec 계약에서 양쪽 API를 생성합니다. 문자열·불리언·`int32`·`float64`·`safeint`, 배열, nullable,
@@ -78,6 +79,8 @@ optional, 문자열 enum/literal, `void` 반환과 모드→앱 방향의 `ipc.F
 큰 파일을 저장할 때는 `await file.download()`로 브라우저 기본 다운로드에 전달합니다.
 전체 본문을 JavaScript 메모리에 올리지 않으며, 저장 위치와 진행 상태는 브라우저가 관리합니다.
 이 호출은 다운로드 요청을 전달하면 완료되고, 디스크 저장 완료를 기다리지는 않습니다.
+영상 미리보기처럼 같은 파일을 여러 번, 필요한 구간만 읽을 때는 `await file.open()`으로 엽니다.
+`<video>`에 `url`을 그대로 넣거나 `read({ start, end })`로 구간을 읽고, 다 쓰면 `close()`합니다.
 
 ```typespec
 import "@adofai-ipc/typespec";

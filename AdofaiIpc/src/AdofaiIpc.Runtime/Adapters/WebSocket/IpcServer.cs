@@ -17,11 +17,13 @@ public sealed partial class IpcServer
 {
   private readonly IpcRegistry _registry;
   private readonly DownloadEndpoint _downloads;
+  private readonly FileEndpoint _files;
   private HttpServer _server;
   private System.Threading.Timer _heartbeat;
   public int Port { get; private set; }
   public string Url => Port == 0 ? null : "http://127.0.0.1:" + Port + "/";
-  public IpcServer(IpcRegistry registry) { _registry = registry; _downloads = new DownloadEndpoint(registry, () => Port); }
+  public IpcServer(IpcRegistry registry)
+  { _registry = registry; _downloads = new DownloadEndpoint(registry, () => Port); _files = new FileEndpoint(registry.OpenedFiles); }
   public void Start()
   {
     if (_server != null) return;
@@ -32,7 +34,9 @@ public sealed partial class IpcServer
       var server = new HttpServer(IPAddress.Loopback, port) { KeepClean = true, WaitTime = TimeSpan.FromSeconds(2) };
       server.Log.Level = LogLevel.Error;
       server.AddWebSocketService<IpcSocket>(IpcProtocol.WebSocketPath, socket => socket.Initialize(_registry));
-      server.OnGet += (_, e) => _downloads.Handle(e);
+      server.OnGet += (_, e) => { if (FileEndpoint.Handles(e.Request.Url.AbsolutePath)) _files.Get(e); else _downloads.Handle(e); };
+      server.OnPost += (_, e) => { if (FileEndpoint.Handles(e.Request.Url.AbsolutePath)) _files.Post(e); else e.Response.StatusCode = 404; };
+      server.OnOptions += (_, e) => { if (FileEndpoint.Handles(e.Request.Url.AbsolutePath)) _files.Options(e); else e.Response.StatusCode = 404; };
       try { server.Start(); if (!server.IsListening) throw new IOException("IPC port is unavailable."); }
       catch (Exception error) { last = error; server.Stop(); continue; }
       _server = server; Port = port; _registry.DownloadBaseUrl = Url;

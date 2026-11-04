@@ -147,7 +147,10 @@ internal static partial class Program
       owned.Clear();
       bundle = () => new FileBundle { Content = Next(), Files = Enumerable.Range(0, 129).Select(_ => Next()).ToArray() };
       var tooMany = await peer.Call("rpc.mod.downloadbundle", new { });
-      Check((string)tooMany.Payload["code"] == "download_ticket_limit" && owned.Count == 130 && owned.All(stream => stream.WasDisposed), "partial file export did not roll back every source, including the unexported tail");
+      Check((string)tooMany.Payload["code"] == "download_ticket_limit" && owned.Count == 130, "too many files did not fail with the ticket limit");
+      // The transfer scope rolls back right after the failure reply is sent, so wait for it.
+      for (int attempt = 0; attempt < 200 && !owned.All(stream => stream.WasDisposed); attempt++) await Task.Delay(10);
+      Check(owned.All(stream => stream.WasDisposed), "partial file export did not roll back every source, including the unexported tail");
       owned.Clear();
       bundle = () => { var file = Next(); return new FileBundle { Content = file, Files = new[] { file, Next() } }; };
       var duplicate = await peer.Call("rpc.mod.downloadbundle", new { });

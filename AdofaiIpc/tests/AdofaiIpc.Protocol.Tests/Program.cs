@@ -26,6 +26,7 @@ internal static partial class Program
       TestDisconnectedEventDelivery();
       await TestSharedRuntime();
       await TestTypedSdk();
+      TestByteRanges();
     }
     var queue = new ConcurrentQueue<Action>();
     var registry = new IpcRegistry(action => queue.Enqueue(action));
@@ -53,6 +54,7 @@ internal static partial class Program
     ns.RegisterCommand("peer.challenge", cmd => ns.SendCommandToPeer(cmd.PeerId, "peer.answer", new { input = 42 }));
     ns.PeerEvent += evt => { if (evt.Name == "peer.answered") ns.SendToPeer(evt.PeerId, "peer.verified", evt.Payload, evt.CorrelationId); };
     ns.PeerSubscribed += peer => ns.SendToPeer(peer.PeerId, "state.snapshot", new { revision = 1 });
+    RegisterOpenedFileCommands(ns);
     var server = new IpcServer(registry); server.Start();
     try
     {
@@ -98,6 +100,7 @@ internal static partial class Program
       Check(response.IsSuccessStatusCode && await response.Content.ReadAsStringAsync() == "a level file", "stream download bytes");
       Check(response.Headers.GetValues("Access-Control-Allow-Origin").Single() == "https://allowed.example", "download CORS");
       Check((await http.GetAsync((string)ticket.Payload["url"])).StatusCode == HttpStatusCode.NotFound, "single-use download");
+      await TestOpenedFilesOverHttp(client, http, registry);
       // Oversized output fails its command without destroying the connection.
       for (int i = 0; i < 3; i++)
       {

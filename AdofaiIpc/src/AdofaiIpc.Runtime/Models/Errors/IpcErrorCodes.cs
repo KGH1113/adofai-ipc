@@ -15,4 +15,7 @@ public static class IpcErrorCodes
   public const string DownloadNotFound = "download_not_found";
   public const string InternalError = "internal_error";
   public const string OriginNotAllowed = "origin_not_allowed";
+  public const string FileExpired = "file_expired";
+  public const string FileNotSeekable = "file_not_seekable";
+  public const string FileOpenLimit = "file_open_limit";
 }

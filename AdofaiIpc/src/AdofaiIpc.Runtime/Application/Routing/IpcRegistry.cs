@@ -225,6 +225,9 @@ public sealed partial class IpcRegistry : IDownloadTickets
   bool IDownloadTickets.TryTake(string token, string origin, out IpcDownloadSource source, out string approvedBrowserOrigin, out string code, out string reason)
     => _downloads.TryTake(token, origin, out source, out approvedBrowserOrigin, out code, out reason);
   internal void ClearDownloadTickets() => _downloads.Clear();
+  /// <summary>Files apps opened for repeated reads at any position.</summary>
+  internal IOpenedFiles OpenedFiles => _downloads;
+  internal void PruneIdleFiles(DateTime nowUtc) => _downloads.PruneIdleFiles(nowUtc);
 
   internal void Resume() => _connections.Resume();
 

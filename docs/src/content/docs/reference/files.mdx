@@ -59,6 +59,7 @@ const settings = JSON.parse(await file.text());
 | `arrayBuffer({ signal? })` | 전체 바이트의 `Promise<ArrayBuffer>` |
 | `blob({ signal? })` | MIME 타입을 유지하는 `Promise<Blob>` |
 | `download()` | 브라우저 기본 다운로드에 전달하는 `Promise<void>`. 전체 파일을 JS 메모리에 올리지 않습니다. |
+| `open({ signal? })` | 원하는 위치를 여러 번 읽을 수 있게 연 `Promise<OpenedFile>`. [열어서 여러 번 읽기](#열어서-여러-번-읽기)를 참고합니다. |
 | `used` | 읽기 API를 호출했는지 나타내는 `boolean` |
 
 파일 하나는 한 번만 읽습니다. 다시 읽으려면 모드 메서드를 다시 호출합니다. `signal`은 파일 읽기를 취소하며, `text()`·`arrayBuffer()`·`blob()`은 전체 내용을 메모리에 올립니다.
@@ -85,6 +86,42 @@ Promise는 **다운로드 요청을 브라우저에 전달하면** 완료됩니�
 연결 종료·모드 비활성화 시 이전 파일은 무효가 되며, 다시 연결한 뒤 새 파일을 요청해야 합니다.
 파일의 60초 시작 제한은 그대로 적용됩니다. DOM이 없는 환경에서는
 `file_download_unavailable` 오류를 반환하며, 해당 환경에서는 `stream()`을 사용합니다.
+
+## 열어서 여러 번 읽기
+
+영상·오디오 미리보기처럼 같은 파일을 여러 번, 필요한 구간만 읽을 때는 `open()`을 사용합니다.
+런타임 HTTP 서버가 파일 URL을 열고 HTTP Range 요청(206)을 받으므로, 전체 본문을 JS 메모리에
+올리지 않습니다. 계약과 C# 코드는 그대로이며, 런타임 2.2.0 이상이 필요합니다.
+
+```ts
+const file = await channel.exportVideo();
+const opened = await file.open();
+
+video.src = opened.url; // 브라우저가 재생·탐색에 필요한 구간만 요청합니다.
+
+const header = opened.read({ start: 0, end: 1024 }); // 0~1023번 바이트
+
+await opened.close(); // 게임 쪽 파일 핸들을 해제합니다.
+```
+
+| `OpenedFile` API | 반환값 |
+| --- | --- |
+| `url` | `<video>`·`<audio>`·`<img>`·링크에 바로 쓸 수 있는 loopback URL |
+| `name`·`type`·`size` | 받은 파일과 같은 파일명·MIME 타입·크기 |
+| `read({ start?, end?, signal? })` | `start`부터 `end` 앞까지(`Blob.slice`와 같음) 읽는 `ReadableStream<Uint8Array>`. 여러 번 호출할 수 있습니다. |
+| `close()` | 파일을 닫는 `Promise<void>`. 두 번 호출해도 됩니다. |
+| `closed` | `close()`를 호출했는지 나타내는 `boolean` |
+
+`open()`도 한 번 사용에 포함되지만, 실패하면 파일을 사용하지 않은 상태로 남깁니다. 이때는
+`stream()`이나 `download()`로 대신 읽습니다. 탐색할 수 없는 소스(`FromWriter()`, 탐색할 수 없는
+스트림)는 `file_not_seekable`로 거절하며, `FromPath()`와 탐색 가능한 `FromStream()`은 항상 열 수
+있습니다. 런타임이 2.2.0보다 오래되었거나 파일이 만료되어 열 수 없으면 `file_open_unavailable`을 반환합니다.
+
+연 파일은 `close()`를 호출하거나, 앱 세션이 끝나거나, 모드가 해제되거나, 30분 동안 아무 요청이 없으면
+닫힙니다. 받은 파일의 60초 시작 제한은 `open()` 호출에 적용됩니다. URL의 토큰이 접근 권한이므로
+`Origin`이 없는 미디어 요청도 허용하며, `Origin`이 있으면 모드가 허용한 출처인지 확인합니다.
+응답은 `Content-Disposition: inline`과 `Content-Security-Policy: sandbox`를 붙여, HTML 같은 문서를
+열어도 런타임 출처에서 스크립트가 실행되지 않습니다. 동시에 열 수 있는 파일은 64개입니다.
 
 ## 선택한 앱에 보내기
 
@@ -120,5 +157,9 @@ app.use(ExportsContract, {
 | `file_transfer_failed` | 본문 전송 중 오류 |
 | `file_transfer_unavailable` | 파일 전송을 지원하지 않는 런타임 |
 | `file_download_unavailable` | 브라우저 다운로드를 제공하지 않는 실행 환경 |
+| `file_not_seekable` | 탐색할 수 없는 소스라 `open()`할 수 없음. 파일은 그대로 남음 |
+| `file_open_unavailable` | 2.2.0보다 오래된 런타임이거나 파일이 만료되어 `open()`할 수 없음. 파일은 그대로 남음 |
+| `file_open_limit` | 이미 64개 파일이 열려 있음 |
+| `file_closed` | 닫은 `OpenedFile`을 읽음 |
 
 아직 읽지 않은 파일은 런타임 전체에서 최대 128개까지 유지합니다. 사용한 스트림과 만료된 파일은 SDK가 정리합니다. 파일 읽기는 게임 스레드에서 실행하지 않습니다.

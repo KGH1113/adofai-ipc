@@ -208,6 +208,11 @@ namespace AdofaiIpc.Transport.ManagedWebSocket.Net
       }
     }
 
+    // ADOFAI-IPC: send the headers on the first flush and stream a body whose
+    // ContentLength64 is known, instead of buffering the whole body to count it.
+    // The caller must write exactly ContentLength64 bytes or abort the response.
+    internal bool StreamsFixedLengthBody { get; set; }
+
     internal string ObjectName {
       get {
         return GetType ().ToString ();

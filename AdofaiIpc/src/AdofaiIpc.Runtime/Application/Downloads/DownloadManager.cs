@@ -2,11 +2,39 @@ using System;
 using System.Threading;
 using AdofaiIpc.Contracts;
 namespace AdofaiIpc.Core;
-internal sealed class DownloadManager : IDownloadTickets {
+internal sealed class DownloadManager : IDownloadTickets, IOpenedFiles {
   private readonly IpcDownloadTicketStore _tickets = new IpcDownloadTicketStore();
+  private readonly IpcOpenedFileStore _opened = new IpcOpenedFileStore();
   internal string BaseUrl { get; set; }
-  internal void RevokeNamespace(string name) => _tickets.RevokeNamespace(name);
-  internal void Clear() => _tickets.Clear();
+  internal void RevokeNamespace(string name) { _tickets.RevokeNamespace(name); _opened.RevokeNamespace(name); }
+  internal void Clear() { _tickets.Clear(); _opened.Clear(); }
+  internal void PruneIdleFiles(DateTime nowUtc) => _opened.PruneIdle(nowUtc);
+  public bool TryOpen(string downloadToken, string origin, out string url, out string approvedBrowserOrigin, out string code, out string reason)
+  {
+    url = null;
+    approvedBrowserOrigin = null;
+    // Check first, so a full store leaves the ticket readable as a stream.
+    if (!_opened.HasCapacity)
+    {
+      code = IpcErrorCodes.FileOpenLimit; reason = "Too many files are open. Close one and try again.";
+      return false;
+    }
+    if (string.IsNullOrEmpty(BaseUrl))
+    {
+      code = "file_transfer_unavailable"; reason = "The file service is unavailable.";
+      return false;
+    }
+    if (!_tickets.TryTakeSeekable(downloadToken, origin, out var ticket, out approvedBrowserOrigin, out code, out reason)) return false;
+    if (!_opened.TryOpen(ticket, out string token, out code, out reason)) { ticket.Source.Dispose(); return false; }
+    url = BaseUrl.TrimEnd('/') + "/ipc/files/" + token;
+    return true;
+  }
+  public bool TryRead(string token, string origin, out IOpenedFileRead read, out string approvedBrowserOrigin, out string code, out string reason)
+    => _opened.TryRead(token, origin, out read, out approvedBrowserOrigin, out code, out reason);
+  public bool TryAuthorize(string token, string origin, out string approvedBrowserOrigin, out string code, out string reason)
+    => _opened.TryAuthorize(token, origin, out approvedBrowserOrigin, out code, out reason);
+  public bool TryClose(string token, string origin, out string approvedBrowserOrigin, out string code, out string reason)
+    => _opened.TryClose(token, origin, out approvedBrowserOrigin, out code, out reason);
   internal IpcFileTicket Export(AdofaiIpcNamespace handle, IpcDownloadSource source,
     CancellationToken sessionCancellation, CancellationToken callCancellation)
   {
@@ -18,7 +46,9 @@ internal sealed class DownloadManager : IDownloadTickets {
       if (!_tickets.TryCreate(handle.Name, source, handle.Info.AllowedOrigins, out token, out var code, out var reason, handle.Info.ExactOrigins))
         throw new IpcFileTransferException(code, reason);
       string key = token;
-      source.AttachLifetime(CancellationTokenSource.CreateLinkedTokenSource(handle.Lifetime.Token, sessionCancellation, callCancellation), () => _tickets.Revoke(key));
+      // The file's session or mod ending also closes it after an app opened it.
+      source.AttachLifetime(CancellationTokenSource.CreateLinkedTokenSource(handle.Lifetime.Token, sessionCancellation, callCancellation),
+        () => { _tickets.Revoke(key); _opened.RevokeSource(source); });
       sessionCancellation.ThrowIfCancellationRequested(); callCancellation.ThrowIfCancellationRequested();
       return new IpcFileTicket(BaseUrl.TrimEnd('/') + "/ipc/download/" + token, source.ByteLength, source.FileName, source.ContentType,
         () => { _tickets.Revoke(key); source.Dispose(); });

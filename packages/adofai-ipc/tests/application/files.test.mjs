@@ -271,3 +271,100 @@ test("mod-initiated callbacks may request a browser download without returning f
   assert.equal(browser.frames.length, 1);
   assert.equal(fetch.mock.callCount(), 0);
 });
+
+const openedUrl = `http://127.0.0.1:${port}/ipc/files/${"b".repeat(43)}`;
+function mockFileService(t, routes = {}) {
+  const service = {
+    open: () => Response.json({ url: openedUrl }),
+    range: request => {
+      const [, start, end] = /^bytes=(\d+)-(\d+)$/.exec(request.headers.get("Range"));
+      return new Response("abc".slice(Number(start), Number(end) + 1), { status: 206, headers: { "Content-Range": `bytes ${start}-${end}/3` } });
+    },
+    close: () => new Response(null, { status: 204 }),
+    download: () => new Response("abc", { headers: { "X-Byte-Length": "3" } }),
+    ...routes,
+  };
+  return t.mock.method(globalThis, "fetch", async (url, options = {}) => {
+    const request = new Request(url, options);
+    if (url.includes("/ipc/files/open/")) return service.open(request);
+    if (url.endsWith("/close")) return service.close(request);
+    if (url.startsWith(openedUrl)) return service.range(request);
+    return service.download(request);
+  });
+}
+
+test("open() serves a file by URL, streams any byte range again and again, and closes it", async t => {
+  const fetch = mockFileService(t);
+  const { channel } = setup(t);
+  const file = await channel.file();
+  const opened = await file.open();
+  assert.equal(file.used, true);
+  assert.equal(opened.url, openedUrl);
+  assert.equal(opened.name, "hello.txt"); assert.equal(opened.type, "text/plain"); assert.equal(opened.size, 3);
+  const [openUrl, openOptions] = fetch.mock.calls[0].arguments;
+  assert.equal(openUrl, descriptor().url.replace("/ipc/download/", "/ipc/files/open/"));
+  assert.equal(openOptions.method, "POST"); assert.equal(openOptions.redirect, "error"); assert.equal(openOptions.credentials, "omit");
+  assert.equal(await new Response(opened.read({ start: 1, end: 3 })).text(), "bc");
+  assert.equal(await new Response(opened.read({ start: 1, end: 3 })).text(), "bc");
+  assert.equal(await new Response(opened.read()).text(), "abc");
+  assert.equal(fetch.mock.calls[1].arguments[1].headers.Range, "bytes=1-2");
+  const calls = fetch.mock.callCount();
+  assert.equal(await new Response(opened.read({ start: 2, end: 2 })).text(), "");
+  assert.equal(fetch.mock.callCount(), calls, "an empty range needs no request");
+  for (const range of [{ start: -1 }, { end: 4 }, { start: 2, end: 1 }, { start: 0.5 }]) assert.throws(() => opened.read(range), RangeError);
+  assert.throws(() => file.stream(), /already been read/);
+  await opened.close(); await opened.close();
+  assert.equal(opened.closed, true);
+  const closes = fetch.mock.calls.filter(call => call.arguments[0] === `${openedUrl}/close`);
+  assert.equal(closes.length, 1); assert.equal(closes[0].arguments[1].keepalive, true);
+  assert.throws(() => opened.read(), error => error.code === "file_closed");
+});
+
+test("open() refusals leave the file unread for stream() or download()", async t => {
+  const { channel, transport } = setup(t);
+  const cases = [
+    [() => Response.json({ code: "file_not_seekable", message: "x" }, { status: 409 }), "file_not_seekable"],
+    [() => Response.json({ code: "file_open_limit", message: "x" }, { status: 429 }), "file_open_limit"],
+    [() => { throw new TypeError("Failed to fetch"); }, "file_open_unavailable"],
+    [() => new Response("Not Implemented", { status: 501 }), "file_open_unavailable"],
+    [() => Response.json({ code: "surprise" }, { status: 500 }), "file_open_unavailable"],
+  ];
+  for (const [open, code] of cases) {
+    const fetch = mockFileService(t, { open });
+    const file = await channel.file();
+    await assert.rejects(file.open(), error => error.code === code);
+    assert.equal(file.used, false);
+    assert.equal(await file.text(), "abc");
+    fetch.mock.restore();
+  }
+  mockFileService(t, { open: () => Response.json({ url: "http://evil.example/ipc/files/" + "b".repeat(43) }) });
+  await assert.rejects((await channel.file()).open(), error => error.code === "invalid_file");
+  transport.disconnect();
+});
+
+test("range reads reject responses that are not the requested bytes", async t => {
+  const { channel } = setup(t);
+  const cases = [
+    [() => new Response("abc"), "file_transfer_failed"],
+    [() => new Response("gone", { status: 404 }), "file_expired"],
+    [() => new Response("ab", { status: 206, headers: { "Content-Range": "bytes 0-1/3" } }), "file_transfer_failed"],
+    [() => new Response("b", { status: 206, headers: { "Content-Range": "bytes 1-2/3" } }), "invalid_file"],
+    [() => new Response("bcd", { status: 206, headers: { "Content-Range": "bytes 1-2/3" } }), "invalid_file"],
+  ];
+  for (const [range, code] of cases) {
+    const fetch = mockFileService(t, { range });
+    const opened = await (await channel.file()).open();
+    await assert.rejects(new Response(opened.read({ start: 1, end: 3 })).text(), error => error.code === code);
+    fetch.mock.restore();
+  }
+});
+
+test("opened files stop reading when their app session ends", async t => {
+  mockFileService(t);
+  const { channel, transport } = setup(t);
+  const opened = await (await channel.file()).open();
+  const unopened = await channel.file();
+  transport.disconnect();
+  assert.throws(() => opened.read(), error => error.code === "unavailable");
+  await assert.rejects(unopened.open(), error => error.code === "unavailable");
+});

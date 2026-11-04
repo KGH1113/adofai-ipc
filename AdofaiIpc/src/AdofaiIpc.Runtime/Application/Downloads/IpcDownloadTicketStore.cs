@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 
 namespace AdofaiIpc.Core;
 
@@ -8,8 +7,6 @@ internal sealed class IpcDownloadTicketStore
 {
   internal const int MaxTicketCount = 128;
   private static readonly TimeSpan TicketLifetime = TimeSpan.FromSeconds(60);
-  private const int TicketBytes = 32;
-  private const int MaxTokenLength = 128;
 
   private readonly object _sync = new object();
   private readonly Dictionary<string, Ticket> _tickets = new Dictionary<string, Ticket>();
@@ -46,7 +43,7 @@ internal sealed class IpcDownloadTicketStore
       {
         do
         {
-          token = CreateToken();
+          token = DownloadAccess.CreateToken();
         }
         while (_tickets.ContainsKey(token));
 
@@ -56,7 +53,7 @@ internal sealed class IpcDownloadTicketStore
           {
             NamespaceName = namespaceName,
             Source = source,
-            AllowedOrigins = CopyOrigins(allowedOrigins),
+            AllowedOrigins = DownloadAccess.CopyOrigins(allowedOrigins),
             ExactOrigins = exactOrigins,
             ExpiresAtUtc = DateTime.UtcNow.Add(TicketLifetime)
           });
@@ -85,13 +82,40 @@ internal sealed class IpcDownloadTicketStore
     out string errorCode,
     out string errorMessage)
   {
+    bool taken = TryTakeTicket(token, origin, false, out Ticket ticket, out approvedBrowserOrigin, out errorCode, out errorMessage);
+    source = ticket?.Source;
+    return taken;
+  }
+
+  /// <summary>
+  /// Takes a ticket whose content can be read again at any position. A source that cannot seek
+  /// keeps its ticket and reports <see cref="IpcErrorCodes.FileNotSeekable"/>, so it can still be read once.
+  /// </summary>
+  internal bool TryTakeSeekable(
+    string token,
+    string origin,
+    out Ticket ticket,
+    out string approvedBrowserOrigin,
+    out string errorCode,
+    out string errorMessage)
+    => TryTakeTicket(token, origin, true, out ticket, out approvedBrowserOrigin, out errorCode, out errorMessage);
+
+  private bool TryTakeTicket(
+    string token,
+    string origin,
+    bool seekable,
+    out Ticket taken,
+    out string approvedBrowserOrigin,
+    out string errorCode,
+    out string errorMessage)
+  {
     approvedBrowserOrigin = null;
-    source = null;
+    taken = null;
     errorCode = null;
     errorMessage = null;
     Ticket expired = null;
 
-    if (!IsValidToken(token))
+    if (!DownloadAccess.IsValidToken(token))
     {
       errorCode = IpcErrorCodes.DownloadNotFound;
       errorMessage = "Download ticket not found or expired.";
@@ -112,27 +136,31 @@ internal sealed class IpcDownloadTicketStore
         errorCode = IpcErrorCodes.DownloadNotFound;
         errorMessage = "Download ticket not found or expired.";
       }
-      else if (!IsOriginAllowed(ticket.AllowedOrigins, origin, ticket.ExactOrigins))
+      else if (!DownloadAccess.IsOriginAllowed(ticket.AllowedOrigins, origin, ticket.ExactOrigins))
       {
         errorCode = IpcErrorCodes.OriginNotAllowed;
         errorMessage = "Origin is not allowed for this download ticket.";
       }
       else
       {
-        // Remove before returning the source so the ticket is single-use even
-        // if the client disconnects during the stream.
-        _tickets.Remove(token);
-        source = ticket.Source;
-        if (ticket.AllowedOrigins != null && ticket.AllowedOrigins.Length > 0
-          && Uri.TryCreate(origin, UriKind.Absolute, out Uri originUri)
-          && (originUri.Scheme == "http" || originUri.Scheme == "https")
-          && origin == originUri.GetLeftPart(UriPartial.Authority))
-          approvedBrowserOrigin = originUri.GetLeftPart(UriPartial.Authority);
+        approvedBrowserOrigin = DownloadAccess.ApprovedBrowserOrigin(ticket.AllowedOrigins, origin);
+        if (seekable && !(ticket.Source.Content != null && ticket.Source.Content.CanSeek))
+        {
+          errorCode = IpcErrorCodes.FileNotSeekable;
+          errorMessage = "This file can only be read once, from the start. Read it as a stream instead.";
+        }
+        else
+        {
+          // Remove before returning the source so the ticket is single-use even
+          // if the client disconnects during the stream.
+          _tickets.Remove(token);
+          taken = ticket;
+        }
       }
     }
 
     expired?.Source.Dispose();
-    return source != null;
+    return taken != null;
   }
 
   internal void Revoke(string token)
@@ -210,81 +238,6 @@ internal sealed class IpcDownloadTicketStore
     return expired;
   }
 
-  private static string CreateToken()
-  {
-    byte[] bytes = new byte[TicketBytes];
-    using (RandomNumberGenerator random = RandomNumberGenerator.Create())
-    {
-      random.GetBytes(bytes);
-    }
-
-    return Convert.ToBase64String(bytes)
-      .TrimEnd('=')
-      .Replace('+', '-')
-      .Replace('/', '_');
-  }
-
-  private static bool IsValidToken(string token)
-  {
-    if (string.IsNullOrEmpty(token) || token.Length > MaxTokenLength) return false;
-
-    for (int i = 0; i < token.Length; i++)
-    {
-      char character = token[i];
-      if (
-        (character < 'a' || character > 'z') &&
-        (character < 'A' || character > 'Z') &&
-        (character < '0' || character > '9') &&
-        character != '-' &&
-        character != '_')
-      {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  private static string[] CopyOrigins(string[] origins)
-  {
-    if (origins == null || origins.Length == 0) return null;
-
-    string[] copy = new string[origins.Length];
-    Array.Copy(origins, copy, origins.Length);
-    return copy;
-  }
-
-  private static bool IsOriginAllowed(string[] allowedOrigins, string origin, bool exactOrigins)
-  {
-    if (string.IsNullOrEmpty(origin)) return true;
-    if (allowedOrigins == null || allowedOrigins.Length == 0) return true;
-
-    for (int i = 0; i < allowedOrigins.Length; i++)
-    {
-      if (OriginMatches(allowedOrigins[i], origin, exactOrigins)) return true;
-    }
-
-    return false;
-  }
-
-  private static bool OriginMatches(string allowed, string origin, bool exactOrigins)
-  {
-    if (string.IsNullOrEmpty(allowed)) return false;
-    if (string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase)) return true;
-
-    if (
-      Uri.TryCreate(allowed, UriKind.Absolute, out Uri allowedUri) &&
-      Uri.TryCreate(origin, UriKind.Absolute, out Uri originUri))
-    {
-      return
-        string.Equals(allowedUri.Scheme, originUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
-        string.Equals(allowedUri.Host, originUri.Host, StringComparison.OrdinalIgnoreCase) &&
-        (exactOrigins ? allowedUri.Port == originUri.Port : allowedUri.IsDefaultPort);
-    }
-
-    return false;
-  }
-
   private static void DisposeTickets(List<Ticket> tickets)
   {
     if (tickets == null) return;
@@ -301,7 +254,7 @@ internal sealed class IpcDownloadTicketStore
     }
   }
 
-  private sealed class Ticket
+  internal sealed class Ticket
   {
     public string NamespaceName;
     public IpcDownloadSource Source;
